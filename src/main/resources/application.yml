@@ -59,9 +59,10 @@ observer:
     cicd-url: ${CICD_URL:http://lily-cicd.lily-system.svc}
 
   logs:
-    # true 면 CloudWatch Logs 에서 컨테이너 로그를 읽는다. Fluent Bit 설정의 로그 그룹 규칙과 맞아야 한다
+    # true 면 CloudWatch Logs 에서 컨테이너 로그를 읽는다. false 면 로그 조회 API 가 503
     cloudwatch-enabled: ${CLOUDWATCH_LOGS_ENABLED:false}
-    log-group-prefix: ${LOG_GROUP_PREFIX:/lily/apps}
+    # Fluent Bit 이 보내는 로그 그룹. 스트림 이름은 {namespace}.{app}.{pod}
+    log-group: ${LOG_GROUP:/lily/apps}
     region: ${AWS_REGION:ap-northeast-2}
 
   store:

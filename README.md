@@ -102,15 +102,67 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | lily-cicd | 위험 판정 시 `POST /api/deployments/{app}/rollback` 호출 | 역할 합의 후 (보류) |
 | lily-frontend | 배포 성공 후 꽃 클릭 → 대시보드(`DASHBOARD_URL`)가 아래 API 사용 | 응답 형식 합의 중 |
 
-## API (예정)
+## API
 
-| Method | Path | 설명 |
+모든 `/api/**`는 `Authorization: Bearer {OBSERVABILITY_API_TOKEN}`이 필요해요 (토큰이 비어 있으면 인증 꺼짐, 로컬 전용).
+
+| Method | Path | 설명 | 상태 |
+|---|---|---|---|
+| GET | `/api/apps/{app}/metrics` | 최근 1분 요청 수 · 에러율 · 응답 시간 + 30초 간격 추이 (ingress 기준) | 구현 |
+| GET | `/api/apps/{app}/logs` | 최근 로그. 줄마다 파드 · 슬롯 · 이미지 버전 (CloudWatch Logs) | 구현 |
+| GET | `/api/apps/{app}/risk` | 현재 위험도와 판정 이력 | 예정 |
+| GET | `/api/nodes` | 서버별 CPU · 메모리 | 예정 |
+| POST | `/api/monitors` | lily-cicd가 배포 완료를 알림 → 감시 시작 | 보류 |
+
+### `GET /api/apps/{app}/metrics`
+
+| 파라미터 | 기본값 | 설명 |
 |---|---|---|
-| POST | `/api/monitors` | lily-cicd가 배포 완료를 알림 → 감시 시작 |
-| GET | `/api/apps/{app}/metrics` | 앱의 요청 수 · 에러율 · 응답 시간 (ingress 기준) |
-| GET | `/api/apps/{app}/logs` | 최근 컨테이너 로그 (CloudWatch Logs) |
-| GET | `/api/apps/{app}/risk` | 현재 위험도와 판정 이력 |
-| GET | `/api/nodes` | 서버별 CPU · 메모리 |
+| `namespace` | `default` | 앱 네임스페이스 |
+| `window` | `10m` | 추이 구간 (`30s`, `10m`, `1h`). 1분 ~ 6시간 |
+
+```json
+{
+  "app": "lily-test", "namespace": "default",
+  "current": { "requestsPerMinute": 42.0, "errorRate": 0.024, "avgLatencyMs": 18.0 },
+  "series": [
+    { "at": "2026-10-01T06:22:03Z", "requestsPerMinute": 4.0, "errorRate": 1.0, "avgLatencyMs": 3.3 }
+  ]
+}
+```
+
+- `current`: 최근 1분 (카드), `series`: 각 시각 기준 최근 1분 값 (그래프)
+- 요청이 없는 앱은 `current`가 모두 0, `series`가 비어 있어요
+
+### `GET /api/apps/{app}/logs`
+
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `namespace` | `default` | 앱 네임스페이스 |
+| `since` | `15m` | 얼마 전부터 (`15m`, `1h`). 최대 7일 |
+| `level` | `all` | `error`면 `ERROR` · `Exception` · `panic` · `Traceback`이 들어간 줄만 |
+| `limit` | `100` | 최근 것부터 최대 개수 (1 ~ 500). 결과는 오래된 순 |
+
+```json
+[
+  { "at": "2026-10-01T06:22:49.953Z", "pod": "lily-test-green-7bfdd46749-7hm67", "slot": "green",
+    "image": "lily-test:20261001-053104",
+    "message": "java.lang.IllegalStateException: chaos: forced application error" }
+]
+```
+
+- `image`로 어떤 배포에서 난 로그인지 바로 보여요
+- 노드 IAM 역할에 `logs:FilterLogEvents` 권한이 필요해요
+
+### 에러 응답
+
+| 코드 | 언제 |
+|---|---|
+| 400 | 앱 이름 · 기간 형식이 잘못됨 |
+| 401 | 토큰이 없거나 다름 |
+| 503 | Prometheus · CloudWatch에 닿지 못함, 또는 로그 조회가 꺼져 있음 |
+
+모든 에러 본문은 `{"message": "..."}`.
 
 ## 진행 상황
 
@@ -120,7 +172,8 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 앱별 지표 조회, ingress 기준 (`metrics`) | 작성 |
 | 감시 대상 모델 (`watch`) | 작성 |
 | 감시 루프 · 롤백 호출 | 보류 (lily-cicd와 역할 합의) |
-| 지표 · 로그 조회 API · 판정 이력 저장 | 개발 중 |
+| 지표 · 로그 조회 API (`api`, `logs`) | 구현 (지표는 실제 Prometheus로 확인, 로그는 배포 후 확인) |
+| 판정 이력 저장 | 예정 |
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`, ingress-nginx 수집) | 적용 완료 |
 | Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |
 | CloudWatch Agent 배포 설정 | 예정 |
@@ -137,10 +190,20 @@ src/main/java/com/lily/observer/
 │  ├─ RuleBasedRiskJudge.java   기본 규칙
 │  ├─ RiskLevel.java            0~3 · 보류, 조치, 화면 색
 │  └─ Judgment.java             판정 결과
+├─ api/                         조회 API
+│  ├─ AppMetricsController.java GET /api/apps/{app}/metrics
+│  ├─ AppLogsController.java    GET /api/apps/{app}/logs
+│  ├─ ApiTokenFilter.java       Bearer 토큰 인증
+│  └─ ApiExceptionHandler.java  에러 → {"message"}
+├─ logs/                        로그 조회
+│  ├─ LogSource.java
+│  ├─ CloudWatchLogSource.java  /lily/apps 에서 앱 스트림만, 파드 · 슬롯 · 이미지 추출
+│  └─ LogsConfig.java           CLOUDWATCH_LOGS_ENABLED=false 면 AWS 에 붙지 않음
 ├─ metrics/                     지표 조회
 │  ├─ MetricsSource.java
 │  ├─ PrometheusMetricsSource.java   PromQL로 앱별 요청 · 5xx · 응답 시간 (ingress-nginx 지표)
-│  └─ TrafficMetrics.java
+│  ├─ TrafficMetrics.java       구간 요약
+│  └─ TrafficPoint.java         추이 한 점
 └─ watch/                       감시 대상 (배포 한 건)
    ├─ Watch.java
    └─ WatchState.java
@@ -163,6 +226,12 @@ Java 21이 필요해요.
 - 기본 포트 `8095` (lily-cicd 8090, lily-blog-sample 8080과 겹치지 않게)
 - Prometheus 주소: `PROMETHEUS_URL` (기본 `http://prometheus.lily-system.svc:9090`)
 - 롤백은 기본으로 꺼져 있어요 (`ROLLBACK_ENABLED=false`). 켜기 전에는 "롤백했을 것"만 기록해요
+- 로컬에서 실제 지표를 보려면 Prometheus를 터널로 연결해요 (`ssh -L 9090:localhost:9090` + 서버에서 `port-forward svc/prometheus 9090:9090`)
+
+```bash
+PROMETHEUS_URL=http://localhost:9090 ./gradlew bootRun
+curl 'localhost:8095/api/apps/lily-test/metrics?window=30m'
+```
 
 ## 설정
 
@@ -176,7 +245,9 @@ Java 21이 필요해요.
 | `JUDGE_CONSECUTIVE` | `2` | 조치에 필요한 연속 판정 횟수 |
 | `ROLLBACK_ENABLED` | `false` | 실제 롤백 호출 여부 |
 | `CICD_URL` | `http://lily-cicd.lily-system.svc` | 롤백 API 주소 |
-| `CLOUDWATCH_LOGS_ENABLED` | `false` | CloudWatch Logs 조회 |
+| `OBSERVABILITY_API_TOKEN` | (비어 있음) | `/api/**` Bearer 토큰. 비어 있으면 인증 꺼짐 (로컬 전용) |
+| `CLOUDWATCH_LOGS_ENABLED` | `false` | CloudWatch Logs 조회. false면 로그 API가 503 |
+| `LOG_GROUP` | `/lily/apps` | Fluent Bit이 보내는 로그 그룹 |
 | `EVENT_STORE` | `memory` | 판정 이력 저장소 (`memory` / `dynamodb`) |
 
 ## Team

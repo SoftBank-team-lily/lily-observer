@@ -37,7 +37,10 @@ public record ObserverProperties(
      */
     public record Rollback(boolean enabled, String cicdUrl) {}
 
-    public record Logs(boolean cloudwatchEnabled, String logGroupPrefix, String region) {}
+    /**
+     * @param logGroup Fluent Bit 이 보내는 로그 그룹 (스트림 이름은 {namespace}.{app}.{pod})
+     */
+    public record Logs(boolean cloudwatchEnabled, String logGroup, String region) {}
 
     public record Store(String type, Dynamodb dynamodb) {}
 

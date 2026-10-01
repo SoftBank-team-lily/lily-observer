@@ -2,6 +2,7 @@ package com.lily.observer.judge;
 
 import com.lily.observer.ObserverProperties;
 import com.lily.observer.metrics.TrafficMetrics;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -24,6 +25,7 @@ public class RuleBasedRiskJudge implements RiskJudge {
     private final ObserverProperties.Judge rules;
     private final Clock clock;
 
+    @Autowired
     public RuleBasedRiskJudge(ObserverProperties properties) {
         this(properties.judge(), Clock.systemUTC());
     }
