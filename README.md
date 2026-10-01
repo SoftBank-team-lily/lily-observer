@@ -174,13 +174,13 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 앱별 지표 조회, ingress 기준 (`metrics`) | 작성 |
 | 감시 대상 모델 (`watch`) | 작성 |
 | 감시 루프 · 롤백 호출 | 보류 (lily-cicd와 역할 합의) |
-| 지표 · 로그 조회 API (`api`, `logs`) | 구현 (지표는 실제 Prometheus로 확인, 로그는 배포 후 확인) |
+| 지표 · 로그 조회 API (`api`, `logs`) | 클러스터에서 동작 확인 |
 | 판정 이력 저장 | 예정 |
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`, ingress-nginx 수집) | 적용 완료 |
 | Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |
 | CloudWatch Agent 배포 설정 | 예정 |
 | API 설명 페이지 (`/`, 파라미터 · 지표 설명 · 직접 호출) | 구현 |
-| Dockerfile · `deploy/k3s/lily-observer.yaml` | 작성 (이미지 빌드 · 배포 전) |
+| Dockerfile · `deploy/k3s/lily-observer.yaml` · `build-image.yaml` | 클러스터 배포 완료 (2026-10-01) |
 | 판정 규칙 테스트 | 예정 |
 
 ## 폴더 구조
@@ -217,10 +217,29 @@ src/main/resources/static/index.html   API 설명 페이지 (/)
 deploy/k3s/
 ├─ prometheus.yaml              ingress-nginx 지표 수집 (lily-system, worker 1개)
 ├─ fluent-bit.yaml              앱 로그 → CloudWatch Logs (노드마다 1개)
-└─ lily-observer.yaml           조회 API 서버 (lily-system, server 노드, ClusterIP)
+├─ lily-observer.yaml           조회 API 서버 (lily-system, server 노드, ClusterIP)
+└─ build-image.yaml             이미지 빌드 일회성 Job (Kaniko → ECR)
 ```
 
 적용은 서버에서 `sudo kubectl apply -f deploy/k3s/{파일}.yaml`.
+
+## 배포
+
+1. ECR에 `lily-observer` 저장소 (한 번만)
+2. 이미지 빌드: GitHub 토큰 Secret → `build-image.yaml` (Kaniko가 main을 빌드해 `lily-observer:latest`로 push) → Secret 삭제
+3. `lily-server-role`에 `logs:FilterLogEvents` 인라인 정책 (`/lily/apps`만, 한 번만)
+4. `sudo kubectl apply -f deploy/k3s/lily-observer.yaml`
+
+새 코드를 반영할 때는 2번 후 `sudo kubectl -n lily-system rollout restart deploy/lily-observer` (`imagePullPolicy: Always`).
+매니페스트의 `<ACCOUNT_ID>`는 적용 전에 계정 번호로 바꾼다.
+
+확인:
+
+```bash
+ssh -i ~/.ssh/lily-key.pem -L 8095:localhost:8095 ubuntu@43.200.152.53
+sudo kubectl -n lily-system port-forward svc/lily-observer 8095:80
+# 브라우저 http://localhost:8095
+```
 
 ## 실행
 
