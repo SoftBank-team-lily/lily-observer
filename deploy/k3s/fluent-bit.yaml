@@ -61,6 +61,14 @@ data:
         Skip_Long_Lines   On
         Refresh_Interval  10
 
+    # 여러 줄짜리 에러(스택 트레이스)를 한 로그로 합친다. 앱 언어가 달라도 되게 세 가지를 같이 켠다
+    # cri 파서는 런타임이 자른 긴 줄만 잇고, 앱이 나눠 찍은 줄은 합치지 않는다
+    [FILTER]
+        Name                  multiline
+        Match                 kube.*
+        multiline.key_content log
+        multiline.parser      java,python,go
+
     # 파드 이름 · 라벨을 붙이고, 앱이 JSON 으로 찍은 로그(prod 프로필)는 필드로 풀어 둔다
     [FILTER]
         Name                kubernetes
