@@ -1,0 +1,164 @@
+# 앱 파드의 지표(/actuator/prometheus)를 모으는 Prometheus.
+# - lily-observer 가 여기에 "canary 최근 1분 에러율" 같은 질문을 한다 (http://prometheus.lily-system.svc:9090)
+# - lily-cicd 가 붙이는 슬롯 라벨 track(stable/canary) · color(blue/green) 를 slot 하나로 합친다
+#   카나리는 Service 하나를 같이 써서 Service 기준으로는 슬롯을 구분할 수 없다. 그래서 파드를 직접 긁는다
+# - 판정에는 최근 몇 분만 필요하므로 보관은 1일, 디스크 대신 emptyDir (재시작하면 비워진다)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: lily-system
+---
+# 어떤 파드가 떠 있는지 조회만 한다
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lily-prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lily-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: lily-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lily-prometheus
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: lily-system
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    scrape_configs:
+      - job_name: lily-apps
+        metrics_path: /actuator/prometheus
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # app 라벨이 있는 파드만 (lily-cicd 가 배포한 사용자 앱)
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: .+
+            action: keep
+          # 슬롯 라벨(track 또는 color)까지 있어야 lily-cicd 가 배포한 앱이다 (headlamp 같은 도구 제외)
+          - source_labels: [__meta_kubernetes_pod_label_track, __meta_kubernetes_pod_label_color]
+            separator: ";"
+            regex: ";"
+            action: drop
+          # 플랫폼 · 시스템 namespace 는 제외
+          - source_labels: [__meta_kubernetes_namespace]
+            regex: lily-system|lily-builds|kube-system|ingress-nginx
+            action: drop
+          # 실행 중이고 포트가 선언된 컨테이너만
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: .+
+            action: keep
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+
+          # slot: track 이 있으면 track (카나리), 없으면 color (블루그린)
+          - source_labels: [__meta_kubernetes_pod_label_track, __meta_kubernetes_pod_label_color]
+            separator: ";"
+            regex: "([^;]+);.*"
+            target_label: slot
+          - source_labels: [__meta_kubernetes_pod_label_track, __meta_kubernetes_pod_label_color]
+            separator: ";"
+            regex: ";(.+)"
+            target_label: slot
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: lily-system
+  labels:
+    app.kubernetes.io/name: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  template:
+    metadata:
+      # app 라벨을 쓰지 않는다. 위 수집 규칙(app 라벨이 있는 파드)에 자기 자신이 걸리지 않게
+      labels:
+        app.kubernetes.io/name: prometheus
+    spec:
+      serviceAccountName: prometheus
+      nodeSelector:
+        node-role.kubernetes.io/worker: worker
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=1d
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir:
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: lily-system
+spec:
+  selector:
+    app.kubernetes.io/name: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

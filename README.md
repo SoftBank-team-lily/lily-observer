@@ -32,7 +32,26 @@ lily-cicd 배포 완료 (DeployMonitor 호출)
 → 판정 이력 저장 · 대시보드에 지표 · 로그 · 위험도 제공
 ```
 
-핵심은 **앱 코드를 고치지 않는 관측**이에요. 사용자 레포에는 Dockerfile만 있으면 되고, 지표와 로그는 플랫폼이 바깥에서 모아요.
+## 앱이 갖춰야 할 것
+
+| 수집 | 앱 조건 | 없으면 |
+|---|---|---|
+| 로그 | 없음 (표준 출력만 쓰면 Fluent Bit가 모아요) | - |
+| 지표 · 위험도 판정 | `GET /actuator/prometheus` 제공 | 판정 **보류**, 자동 롤백 안 함, 대시보드에 "지표 없음" |
+
+Spring Boot 앱은 두 가지만 있으면 돼요 ([lily-blog-sample](https://github.com/SoftBank-team-lily/lily-blog-sample) 참고).
+
+```gradle
+implementation 'org.springframework.boot:spring-boot-starter-actuator'
+runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+```
+
+```yaml
+management.endpoints.web.exposure.include: health,info,prometheus
+```
+
+- 지표 이름은 Spring Boot 기본값 `http_server_requests_seconds`를 써요
+- 노출 설정만 있고 라이브러리가 없으면 주소가 생기지 않아요 (Prometheus Targets에 DOWN)
 
 ## Architecture
 
