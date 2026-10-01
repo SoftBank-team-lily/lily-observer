@@ -64,6 +64,9 @@ spec:
         app: lily-observer
     spec:
       serviceAccountName: lily-observer
+      # ECR 로그인 정보. ecr-credentials CronJob 이 갱신한다 (default ServiceAccount 에만 붙어 있어서 직접 지정)
+      imagePullSecrets:
+        - name: ecr-pull
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
       tolerations:
