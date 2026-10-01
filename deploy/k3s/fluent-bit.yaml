@@ -1,0 +1,158 @@
+# 앱 컨테이너 로그를 CloudWatch Logs(/lily/apps) 로 보내는 Fluent Bit.
+# - 모든 노드(server 포함)에 하나씩 뜬다 (DaemonSet). 각 노드의 /var/log/containers 를 읽는다
+# - lily-cicd 가 배포한 앱(track 또는 color 라벨이 있는 파드)의 로그만 보낸다
+# - 롤백으로 파드가 지워져도 로그가 남아서, 실패 원인을 나중에 볼 수 있다
+# - AWS 권한은 노드 IAM 역할(CloudWatchAgentServerPolicy). 로그 그룹 /lily/apps 는 콘솔에서 미리 만든다 (보존 7일)
+# - 로그 스트림 이름: {namespace}.{app}.{pod}  예) default.lily-test.lily-test-green-7bfdd46749-7hm67
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluent-bit
+  namespace: lily-system
+---
+# 로그에 파드 라벨(app, track, color)을 붙이려고 파드 정보를 조회만 한다
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lily-fluent-bit
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lily-fluent-bit
+subjects:
+  - kind: ServiceAccount
+    name: fluent-bit
+    namespace: lily-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lily-fluent-bit
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: lily-system
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush          5
+        Log_Level      info
+        Parsers_File   /fluent-bit/etc/parsers.conf
+        HTTP_Server    On
+        HTTP_Listen    0.0.0.0
+        HTTP_Port      2020
+        Health_Check   On
+
+    # k3s 는 containerd 라서 로그 한 줄이 cri 형식이다. 플랫폼 · 시스템 namespace 는 처음부터 읽지 않는다
+    [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*.log
+        Exclude_Path      /var/log/containers/*_kube-system_*.log,/var/log/containers/*_lily-system_*.log,/var/log/containers/*_lily-builds_*.log,/var/log/containers/*_ingress-nginx_*.log
+        multiline.parser  cri
+        DB                /var/fluent-bit/state/tail.db
+        Mem_Buf_Limit     10MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+    # 파드 이름 · 라벨을 붙이고, 앱이 JSON 으로 찍은 로그(prod 프로필)는 필드로 풀어 둔다
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Keep_Log            Off
+        Labels              On
+        Annotations         Off
+
+    # lily-cicd 가 배포한 앱만 (슬롯 라벨 track 또는 color 가 있는 파드)
+    [FILTER]
+        Name        grep
+        Match       kube.*
+        Logical_Op  or
+        Regex       $kubernetes['labels']['track'] .+
+        Regex       $kubernetes['labels']['color'] .+
+
+    [OUTPUT]
+        Name                 cloudwatch_logs
+        Match                kube.*
+        region               ap-northeast-2
+        log_group_name       /lily/apps
+        log_stream_template  $kubernetes['namespace_name'].$kubernetes['labels']['app'].$kubernetes['pod_name']
+        log_stream_prefix    unknown.
+        auto_create_group    false
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: lily-system
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluent-bit
+  template:
+    metadata:
+      # app 라벨을 쓰지 않는다 (Prometheus 수집 대상 아님)
+      labels:
+        app.kubernetes.io/name: fluent-bit
+    spec:
+      serviceAccountName: fluent-bit
+      # 노드 IAM 역할 자격 증명(EC2 메타데이터)을 파드에서 확실히 받으려고 노드 네트워크를 그대로 쓴다
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # server(control-plane) 노드의 앱 로그도 모은다
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: fluent-bit
+          image: fluent/fluent-bit:3.2.10
+          ports:
+            - name: http
+              containerPort: 2020
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc/fluent-bit.conf
+              subPath: fluent-bit.conf
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: state
+              mountPath: /var/fluent-bit/state
+      volumes:
+        - name: config
+          configMap:
+            name: fluent-bit-config
+        - name: varlog
+          hostPath:
+            path: /var/log
+        # 어디까지 읽었는지 기록. 재시작해도 같은 로그를 다시 보내지 않는다
+        - name: state
+          hostPath:
+            path: /var/lib/lily-fluent-bit
+            type: DirectoryOrCreate

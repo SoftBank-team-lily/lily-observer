@@ -76,7 +76,7 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 구성 | 역할 |
 |---|---|
 | Prometheus | 파드마다 `/actuator/prometheus`를 수집하고, lily-cicd가 붙인 슬롯 라벨(`track`: stable/canary, `color`: blue/green)을 `slot`으로 합쳐요 |
-| Fluent Bit | 모든 노드의 컨테이너 로그를 CloudWatch Logs로 보내요. 파드가 롤백으로 지워져도 로그는 남아요 |
+| Fluent Bit | 모든 노드의 컨테이너 로그를 CloudWatch Logs `/lily/apps`(7일 보관)로 보내요. 파드마다 로그 스트림 `{namespace}.{app}.{pod}`. 파드가 롤백으로 지워져도 로그는 남아요 |
 | CloudWatch Agent | 서버 3대의 CPU · 메모리 · 디스크를 보내요 (EC2 기본 지표에는 메모리가 없어요) |
 | lily-observer | 판정, 롤백 요청, 이력 저장, 대시보드 API |
 
@@ -121,7 +121,8 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 감시 루프 · 롤백 호출 | 개발 중 |
 | 대시보드 API · 판정 이력 저장 | 개발 중 |
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`) | 적용 완료 |
-| Fluent Bit · CloudWatch Agent 배포 설정 | 개발 중 |
+| Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |
+| CloudWatch Agent 배포 설정 | 예정 |
 | 테스트 · Dockerfile · k3s 매니페스트 | 예정 |
 
 ## 폴더 구조
@@ -142,7 +143,13 @@ src/main/java/com/lily/observer/
 └─ watch/                       감시 대상 (배포 한 건)
    ├─ Watch.java
    └─ WatchState.java
+
+deploy/k3s/
+├─ prometheus.yaml              앱 지표 수집 (lily-system, worker 1개)
+└─ fluent-bit.yaml              앱 로그 → CloudWatch Logs (노드마다 1개)
 ```
+
+적용은 서버에서 `sudo kubectl apply -f deploy/k3s/{파일}.yaml`.
 
 ## 실행
 
