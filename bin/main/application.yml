@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: lily-observer
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  # lily-cicd(8090), lily-blog-sample(8080) 와 겹치지 않게 둔다
+  port: ${SERVER_PORT:8095}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  version: ${APP_VERSION:dev}
+  color: ${APP_COLOR:blue}
+
+observer:
+  # 비어 있으면 /api/** 인증을 끈다 (로컬 전용). prod 에서는 반드시 설정
+  api-token: ${OBSERVABILITY_API_TOKEN:}
+
+  prometheus:
+    # 클러스터 안 Prometheus. 로컬에서는 port-forward 한 주소
+    url: ${PROMETHEUS_URL:http://prometheus.lily-system.svc:9090}
+    # 앱 지표 이름 (Spring Boot Micrometer 기본값, lily-blog-sample 계약)
+    request-metric: ${REQUEST_METRIC:http_server_requests_seconds}
+
+  watch:
+    # 판정 주기와 감시 기간. 감시 기간이 지나도록 위험이 없으면 PASSED 로 끝낸다
+    interval: ${WATCH_INTERVAL:30s}
+    window: ${WATCH_WINDOW:10m}
+
+  judge:
+    # 최근 1분 요청이 이보다 적으면 비율이 튀므로 판정을 보류한다
+    min-requests: ${JUDGE_MIN_REQUESTS:20}
+    # 에러율(5xx) 기준. notice < warning < critical
+    notice-error-rate: ${JUDGE_NOTICE_ERROR_RATE:0.01}
+    warning-error-rate: ${JUDGE_WARNING_ERROR_RATE:0.02}
+    critical-error-rate: ${JUDGE_CRITICAL_ERROR_RATE:0.05}
+    # 평균 응답 시간이 기준 슬롯(stable) 대비 이 배수를 넘으면 warning
+    latency-ratio: ${JUDGE_LATENCY_RATIO:2.0}
+    # 같은 등급이 연속 몇 번 나와야 조치하는지
+    consecutive: ${JUDGE_CONSECUTIVE:2}
+
+  rollback:
+    # false 면 롤백하지 않고 "롤백했을 것"만 기록한다 (공용 클러스터 보호용 기본값)
+    enabled: ${ROLLBACK_ENABLED:false}
+    # lily-cicd 롤백 API (POST /api/deployments/{app}/rollback)
+    cicd-url: ${CICD_URL:http://lily-cicd.lily-system.svc}
+
+  logs:
+    # true 면 CloudWatch Logs 에서 컨테이너 로그를 읽는다. Fluent Bit 설정의 로그 그룹 규칙과 맞아야 한다
+    cloudwatch-enabled: ${CLOUDWATCH_LOGS_ENABLED:false}
+    log-group-prefix: ${LOG_GROUP_PREFIX:/lily/apps}
+    region: ${AWS_REGION:ap-northeast-2}
+
+  store:
+    # memory | dynamodb. 판정 이력 · 배포 이벤트 저장소
+    type: ${EVENT_STORE:memory}
+    dynamodb:
+      table: ${DYNAMODB_TABLE:lily-observer-events}
+      endpoint: ${DYNAMODB_ENDPOINT:}
+      region: ${AWS_REGION:ap-northeast-2}
+      create-table: ${DYNAMODB_CREATE_TABLE:false}
