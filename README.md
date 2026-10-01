@@ -104,6 +104,8 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 
 ## API
 
+메인 주소(`/`)에 파라미터 · 지표 설명과 직접 호출 화면이 있어요.
+
 모든 `/api/**`는 `Authorization: Bearer {OBSERVABILITY_API_TOKEN}`이 필요해요 (토큰이 비어 있으면 인증 꺼짐, 로컬 전용).
 
 | Method | Path | 설명 | 상태 |
@@ -177,7 +179,9 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`, ingress-nginx 수집) | 적용 완료 |
 | Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |
 | CloudWatch Agent 배포 설정 | 예정 |
-| 테스트 · Dockerfile · k3s 매니페스트 | 예정 |
+| API 설명 페이지 (`/`, 파라미터 · 지표 설명 · 직접 호출) | 구현 |
+| Dockerfile · `deploy/k3s/lily-observer.yaml` | 작성 (이미지 빌드 · 배포 전) |
+| 판정 규칙 테스트 | 예정 |
 
 ## 폴더 구조
 
@@ -208,9 +212,12 @@ src/main/java/com/lily/observer/
    ├─ Watch.java
    └─ WatchState.java
 
+src/main/resources/static/index.html   API 설명 페이지 (/)
+
 deploy/k3s/
 ├─ prometheus.yaml              ingress-nginx 지표 수집 (lily-system, worker 1개)
-└─ fluent-bit.yaml              앱 로그 → CloudWatch Logs (노드마다 1개)
+├─ fluent-bit.yaml              앱 로그 → CloudWatch Logs (노드마다 1개)
+└─ lily-observer.yaml           조회 API 서버 (lily-system, server 노드, ClusterIP)
 ```
 
 적용은 서버에서 `sudo kubectl apply -f deploy/k3s/{파일}.yaml`.

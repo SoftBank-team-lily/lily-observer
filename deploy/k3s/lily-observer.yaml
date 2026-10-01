@@ -1,0 +1,90 @@
+# lily-observer 를 k3s 에 올리는 매니페스트.
+# - 지표는 Prometheus(prometheus.yaml), 로그는 CloudWatch Logs /lily/apps(fluent-bit.yaml) 에서 읽는다
+# - 로그 조회에 AWS 권한(logs:FilterLogEvents)이 필요하다. 권한을 붙인 lily-server-role 이 있는 server 노드에서만 돈다
+#   정책 예시 (lily-server-role 에 인라인 정책으로 추가):
+#   {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["logs:FilterLogEvents"],
+#     "Resource":"arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/lily/apps:*"}]}
+# - 클러스터 안에서만 연다 (ClusterIP). 확인은 port-forward 로 한다
+# - API 토큰은 Secret lily-observer-env 의 OBSERVABILITY_API_TOKEN. Secret 이 없으면 인증이 꺼진다
+#     sudo kubectl -n lily-system create secret generic lily-observer-env --from-literal=OBSERVABILITY_API_TOKEN=<토큰>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lily-observer
+  namespace: lily-system
+  labels:
+    app: lily-observer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lily-observer
+  template:
+    metadata:
+      labels:
+        app: lily-observer
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: lily-observer
+          image: <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/lily-observer:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8095
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            - name: PROMETHEUS_URL
+              value: http://prometheus.lily-system.svc:9090
+            - name: CLOUDWATCH_LOGS_ENABLED
+              value: "true"
+            - name: LOG_GROUP
+              value: /lily/apps
+            - name: AWS_REGION
+              value: ap-northeast-2
+            - name: OBSERVABILITY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: lily-observer-env
+                  key: OBSERVABILITY_API_TOKEN
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lily-observer
+  namespace: lily-system
+spec:
+  selector:
+    app: lily-observer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lily-observer API</title>
+<style>
+  :root {
+    --bg: #f7f7f8; --panel: #ffffff; --text: #1c1d21; --muted: #62646c; --line: #e3e4e8;
+    --accent: #c2417a; --accent-soft: #fbe9f1; --code-bg: #f1f2f4;
+    --get: #1f7a4d; --get-soft: #e3f4ea; --post: #8a5a00; --post-soft: #fdf1d8;
+    --ok: #1f7a4d; --warn: #a86b00; --bad: #b42318; --hold: #6b6f78;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141518; --panel: #1c1d21; --text: #e9eaee; --muted: #9a9ca5; --line: #2c2e34;
+      --accent: #f07aae; --accent-soft: #3a1f2c; --code-bg: #24262b;
+      --get: #5fd39a; --get-soft: #183326; --post: #f2b84b; --post-soft: #3a2d10;
+      --ok: #5fd39a; --warn: #f2b84b; --bad: #ff7a6e; --hold: #9a9ca5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 80px; }
+  header h1 { margin: 0; font-size: 26px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  nav { margin: 20px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+  nav a { color: var(--text); text-decoration: none; padding: 4px 10px; border: 1px solid var(--line);
+          border-radius: 999px; background: var(--panel); font-size: 13px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-top: 16px; }
+  h2 { margin: 0 0 12px; font-size: 19px; }
+  h3 { margin: 22px 0 8px; font-size: 15px; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .table-wrap { overflow-x: auto; }
+  .endpoint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .method { font: 700 12px ui-monospace, monospace; padding: 3px 8px; border-radius: 5px; }
+  .get { color: var(--get); background: var(--get-soft); }
+  .post { color: var(--post); background: var(--post-soft); }
+  .path { font: 600 15px ui-monospace, monospace; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .try { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; margin-top: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                  background: var(--bg); color: var(--text); min-width: 120px; }
+  button { font: inherit; font-size: 14px; padding: 7px 14px; border: 0; border-radius: 6px;
+           background: var(--accent); color: #fff; cursor: pointer; }
+  .status { font-size: 13px; margin-top: 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .card .label { font-size: 12px; color: var(--muted); }
+  .card .value { font-size: 22px; font-weight: 700; }
+  .lv-ok { color: var(--ok); } .lv-warn { color: var(--warn); } .lv-bad { color: var(--bad); } .lv-hold { color: var(--hold); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>lily-observer API</h1>
+    <p>배포된 앱의 요청 지표와 로그를 조회합니다. 대시보드와 AI 진단이 이 API를 씁니다.</p>
+  </header>
+
+  <nav>
+    <a href="#overview">개요</a>
+    <a href="#auth">인증</a>
+    <a href="#metrics">지표 조회</a>
+    <a href="#logs">로그 조회</a>
+    <a href="#risk">위험도 기준</a>
+    <a href="#errors">에러 응답</a>
+    <a href="#planned">예정 API</a>
+  </nav>
+
+  <section id="overview">
+    <h2>개요</h2>
+    <pre>[사용자 요청] → ingress-nginx (앱마다 {app}-ingress) → Prometheus ─┐
+[앱 로그]     → Fluent Bit (서버마다 1개)  → CloudWatch Logs ──┤
+                                                               ▼
+                                         lily-observer  /api/apps/{app}/...</pre>
+    <ul>
+      <li>지표는 앱이 아니라 <b>입구(ingress-nginx)</b>에서 셉니다. 앱 언어 · 프레임워크와 상관없이 같은 숫자가 나옵니다.</li>
+      <li>앱은 <code>{app}-ingress</code> 이름으로 구분합니다 (lily-cicd 규칙). 블루그린의 blue · green은 지표에서 구분하지 않습니다.</li>
+      <li>로그는 <code>/lily/apps</code> 로그 그룹, 파드마다 스트림 <code>{namespace}.{app}.{pod}</code>에 7일 보관됩니다.</li>
+      <li>Prometheus 보관은 1일입니다. 지표 조회 구간은 최대 6시간입니다.</li>
+    </ul>
+  </section>
+
+  <section id="auth">
+    <h2>인증</h2>
+    <p><code>/api/**</code>는 헤더 <code>Authorization: Bearer {OBSERVABILITY_API_TOKEN}</code>이 필요합니다. 서버에 토큰이 설정되지 않았으면 인증이 꺼져 있습니다 (로컬 실행 전용).</p>
+    <div class="row">
+      <label>토큰 (이 페이지의 요청에만 사용, 브라우저 탭을 닫으면 지워짐)
+        <input id="token" type="password" placeholder="비어 있으면 헤더 없이 요청" style="min-width:320px">
+      </label>
+    </div>
+  </section>
+
+  <section id="metrics">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/metrics</span><span class="tag">구현</span></div>
+    <p>앱의 최근 1분 요청 지표(카드용)와 30초 간격 추이(그래프용)를 돌려줍니다.</p>
+
+    <h3>요청 파라미터</h3>
+    <div class="table-wrap"><table>
+      <tr><th>이름</th><th>위치</th><th>기본값</th><th>설명</th></tr>
+      <tr><td><code>app</code></td><td>경로</td><td>-</td><td>앱 이름. 소문자 · 숫자 · <code>-</code>. 배포할 때 쓴 이름 그대로 (예: <code>lily-test</code>)</td></tr>
+      <tr><td><code>namespace</code></td><td>쿼리</td><td><code>default</code></td><td>앱이 배포된 네임스페이스</td></tr>
+      <tr><td><code>window</code></td><td>쿼리</td><td><code>10m</code></td><td>추이 구간. <code>30s</code>, <code>10m</code>, <code>1h</code> 형식. 1분보다 짧으면 1분, 6시간보다 길면 6시간으로 맞춥니다</td></tr>
+    </table></div>
+
+    <h3>응답 필드</h3>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입 · 단위</th><th>뜻</th></tr>
+      <tr><td><code>app</code>, <code>namespace</code></td><td>문자열</td><td>요청한 값 그대로</td></tr>
+      <tr><td><code>current</code></td><td>객체</td><td>지금 시각 기준 <b>최근 1분</b> 요약. 대시보드 카드에 씁니다</td></tr>
+      <tr><td><code>series</code></td><td>배열</td><td><code>window</code> 구간을 <b>30초 간격</b>으로 나눈 점들. 각 점의 값은 그 시각 기준 최근 1분 값입니다. 그래프에 씁니다</td></tr>
+      <tr><td><code>series[].at</code></td><td>시각 (UTC, ISO-8601)</td><td>그 점의 기준 시각. 한국 시간은 +9시간</td></tr>
+    </table></div>
+
+    <h3>지표 하나하나</h3>
+    <div class="table-wrap"><table>
+      <tr><th>지표</th><th>단위</th><th>계산 방법</th><th>읽는 법</th></tr>
+      <tr>
+        <td><code>requestsPerMinute</code><br><span class="muted">분당 요청 수</span></td>
+        <td>회/분</td>
+        <td>ingress-nginx가 센 요청 수의 최근 1분 증가량.<br><code>sum(increase(nginx_ingress_controller_requests{ingress="{app}-ingress"}[1m]))</code></td>
+        <td>응답 코드와 상관없이 모든 요청. 소수점이 나오는 건 Prometheus가 15초 간격 숫자로 1분 값을 추정하기 때문입니다. <b>20 미만이면 위험도 판정을 보류</b>합니다 (적은 요청으로 비율이 크게 튀는 걸 막기 위해)</td>
+      </tr>
+      <tr>
+        <td><code>errorRate</code><br><span class="muted">에러율</span></td>
+        <td>0.0 ~ 1.0</td>
+        <td>5xx 응답 수 ÷ 전체 요청 수 (최근 1분).<br><code>status=~"5.."</code>인 요청만 에러로 셉니다</td>
+        <td><code>0.05</code> = 5%. 4xx(잘못된 주소, 권한 없음 등)는 사용자 쪽 문제라 에러로 세지 않습니다. 요청이 없으면 0. 위험도 기준: 1% 알림 · 2% 주의 · 5% 위험</td>
+      </tr>
+      <tr>
+        <td><code>avgLatencyMs</code><br><span class="muted">평균 응답 시간</span></td>
+        <td>밀리초</td>
+        <td>ingress-nginx가 요청을 받은 순간부터 응답을 다 보낼 때까지 걸린 시간의 평균.<br><code>request_duration_seconds_sum ÷ _count</code> (최근 1분)</td>
+        <td>앱 처리 시간 + ingress와 앱 사이 전달 시간. 평균이라 느린 요청 몇 개는 묻힐 수 있습니다. 위험도 기준: 배포 전보다 2배 이상이면 주의</td>
+      </tr>
+    </table></div>
+    <p class="muted">주의: 지표는 입구를 지나는 요청만 셉니다. 쿠버네티스가 직접 보내는 상태 확인(health probe)은 입구를 지나지 않아 빠집니다. 요청이 한 번도 없던 앱은 <code>current</code>가 모두 0, <code>series</code>가 비어 있습니다.</p>
+
+    <h3>응답 예시</h3>
+<pre>{
+  "app": "lily-test",
+  "namespace": "default",
+  "current": { "requestsPerMinute": 42.0, "errorRate": 0.024, "avgLatencyMs": 18.0 },
+  "series": [
+    { "at": "2026-10-01T06:22:03Z", "requestsPerMinute": 4.0, "errorRate": 1.0, "avgLatencyMs": 3.3 },
+    { "at": "2026-10-01T06:22:33Z", "requestsPerMinute": 4.0, "errorRate": 1.0, "avgLatencyMs": 3.3 }
+  ]
+}</pre>
+
+    <div class="try">
+      <b>직접 호출</b>
+      <div class="row" style="margin-top:8px">
+        <label>app <input id="m-app" value="lily-test"></label>
+        <label>namespace <input id="m-ns" value="default"></label>
+        <label>window <input id="m-window" value="30m"></label>
+        <button type="button" id="m-run">조회</button>
+      </div>
+      <div class="status muted" id="m-status"></div>
+      <div class="cards" id="m-cards"></div>
+      <pre id="m-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="logs">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/logs</span><span class="tag">구현</span></div>
+    <p>CloudWatch Logs에서 그 앱의 최근 로그를 돌려줍니다. 줄마다 어느 파드 · 슬롯 · 이미지 버전에서 나온 로그인지 붙어 있어 <b>어떤 배포에서 난 로그인지</b> 바로 보입니다.</p>
+
+    <h3>요청 파라미터</h3>
+    <div class="table-wrap"><table>
+      <tr><th>이름</th><th>위치</th><th>기본값</th><th>설명</th></tr>
+      <tr><td><code>app</code></td><td>경로</td><td>-</td><td>앱 이름</td></tr>
+      <tr><td><code>namespace</code></td><td>쿼리</td><td><code>default</code></td><td>앱 네임스페이스</td></tr>
+      <tr><td><code>since</code></td><td>쿼리</td><td><code>15m</code></td><td>얼마 전부터. <code>15m</code>, <code>1h</code>, <code>2d</code> 형식. 최대 7일 (CloudWatch 보관 기간)</td></tr>
+      <tr><td><code>level</code></td><td>쿼리</td><td><code>all</code></td><td><code>error</code>면 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code> 중 하나가 들어간 줄만 (대소문자 구분)</td></tr>
+      <tr><td><code>limit</code></td><td>쿼리</td><td><code>100</code></td><td>최근 것부터 최대 개수 (1 ~ 500). 결과는 오래된 순으로 정렬</td></tr>
+    </table></div>
+
+    <h3>응답 필드 (배열의 각 항목)</h3>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>at</code></td><td>시각 (UTC)</td><td>앱이 로그를 찍은 시각 (컨테이너 로그 파일 기준)</td></tr>
+      <tr><td><code>pod</code></td><td>문자열</td><td>로그를 찍은 파드. 예: <code>lily-test-green-7bfdd46749-7hm67</code></td></tr>
+      <tr><td><code>slot</code></td><td>문자열 | null</td><td>lily-cicd 슬롯 라벨. 카나리면 <code>stable</code> · <code>canary</code>, 블루그린이면 <code>blue</code> · <code>green</code>. 둘 다 있으면 카나리 값</td></tr>
+      <tr><td><code>image</code></td><td>문자열 | null</td><td>이미지 이름:태그 (레지스트리 주소 제외). 예: <code>lily-test:20261001-053104</code>. 태그가 배포 시각이라 몇 번째 배포인지 알 수 있습니다</td></tr>
+      <tr><td><code>message</code></td><td>문자열</td><td>앱이 찍은 로그 한 줄 그대로</td></tr>
+    </table></div>
+    <p class="muted">알려진 제한: 여러 줄짜리 에러(Java 스택 트레이스의 <code>at ...</code> 줄)는 줄마다 따로 저장됩니다. 에러 위치를 보려면 같은 시각 앞뒤 로그를 <code>level=all</code>로 함께 조회하세요. 이 API를 쓰려면 서버 IAM 역할에 <code>logs:FilterLogEvents</code> 권한이 필요합니다.</p>
+
+    <h3>응답 예시</h3>
+<pre>[
+  {
+    "at": "2026-10-01T06:22:49.953Z",
+    "pod": "lily-test-green-7bfdd46749-7hm67",
+    "slot": "green",
+    "image": "lily-test:20261001-053104",
+    "message": "java.lang.IllegalStateException: chaos: forced application error"
+  }
+]</pre>
+
+    <div class="try">
+      <b>직접 호출</b>
+      <div class="row" style="margin-top:8px">
+        <label>app <input id="l-app" value="lily-test"></label>
+        <label>namespace <input id="l-ns" value="default"></label>
+        <label>since <input id="l-since" value="1h"></label>
+        <label>level
+          <select id="l-level"><option>all</option><option selected>error</option></select>
+        </label>
+        <label>limit <input id="l-limit" value="20" style="min-width:70px"></label>
+        <button type="button" id="l-run">조회</button>
+      </div>
+      <div class="status muted" id="l-status"></div>
+      <pre id="l-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="risk">
+    <h2>위험도 기준</h2>
+    <p>위 지표로 판정합니다 (판정 루프는 lily-cicd와 역할 합의 후 진행). 기준값은 환경변수 <code>JUDGE_*</code>로 바꿀 수 있습니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>위험도</th><th>조건 (최근 1분)</th><th>조치</th></tr>
+      <tr><td class="lv-hold">보류</td><td><code>requestsPerMinute</code> &lt; 20</td><td>판정하지 않음</td></tr>
+      <tr><td class="lv-ok">0 정상</td><td><code>errorRate</code> &lt; 1%</td><td>없음</td></tr>
+      <tr><td class="lv-ok">1 알림</td><td><code>errorRate</code> ≥ 1%</td><td>기록</td></tr>
+      <tr><td class="lv-warn">2 주의</td><td><code>errorRate</code> ≥ 2%, 또는 <code>avgLatencyMs</code>가 배포 전의 2배 이상</td><td>주의 알림</td></tr>
+      <tr><td class="lv-bad">3 위험</td><td><code>errorRate</code> ≥ 5%</td><td>자동 롤백 (lily-cicd 롤백 API)</td></tr>
+    </table></div>
+    <p class="muted">같은 등급이 연속 2번 나와야 조치합니다 (순간 스파이크 무시).</p>
+  </section>
+
+  <section id="errors">
+    <h2>에러 응답</h2>
+    <p>본문은 항상 <code>{"message": "..."}</code>입니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>코드</th><th>언제</th></tr>
+      <tr><td>400</td><td>앱 이름 · 기간 · limit 형식이 잘못됨</td></tr>
+      <tr><td>401</td><td>토큰이 없거나 다름</td></tr>
+      <tr><td>503</td><td>Prometheus · CloudWatch에 닿지 못함, 또는 로그 조회가 꺼져 있음 (<code>CLOUDWATCH_LOGS_ENABLED=false</code>)</td></tr>
+    </table></div>
+  </section>
+
+  <section id="planned">
+    <h2>예정 API</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Method</th><th>Path</th><th>설명</th><th>상태</th></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/apps/{app}/risk</code></td><td>현재 위험도와 판정 이력</td><td>예정</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/nodes</code></td><td>서버별 CPU · 메모리 (CloudWatch Agent)</td><td>예정</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/monitors</code></td><td>lily-cicd가 배포 완료를 알림 → 감시 시작</td><td>보류</td></tr>
+    </table></div>
+  </section>
+</main>
+
+<script>
+  const tokenInput = document.getElementById('token');
+  try { tokenInput.value = sessionStorage.getItem('observer-token') || ''; } catch (e) {}
+  tokenInput.addEventListener('input', () => {
+    try { sessionStorage.setItem('observer-token', tokenInput.value); } catch (e) {}
+  });
+
+  async function call(path) {
+    const headers = {};
+    if (tokenInput.value) headers['Authorization'] = 'Bearer ' + tokenInput.value;
+    const started = performance.now();
+    const response = await fetch(path, { headers });
+    const text = await response.text();
+    let body;
+    try { body = JSON.parse(text); } catch (e) { body = text; }
+    return { status: response.status, ms: Math.round(performance.now() - started), body };
+  }
+
+  function show(prefix, result, path) {
+    document.getElementById(prefix + '-status').textContent = `GET ${path} → ${result.status} (${result.ms}ms)`;
+    const out = document.getElementById(prefix + '-out');
+    out.hidden = false;
+    out.textContent = typeof result.body === 'string' ? result.body : JSON.stringify(result.body, null, 2);
+  }
+
+  function card(label, value, cls) {
+    return `<div class="card"><div class="label">${label}</div><div class="value ${cls || ''}">${value}</div></div>`;
+  }
+
+  function errorClass(rate, rpm) {
+    if (rpm < 20) return 'lv-hold';
+    if (rate >= 0.05) return 'lv-bad';
+    if (rate >= 0.02) return 'lv-warn';
+    return 'lv-ok';
+  }
+
+  document.getElementById('m-run').addEventListener('click', async () => {
+    const app = encodeURIComponent(document.getElementById('m-app').value.trim());
+    const params = new URLSearchParams({
+      namespace: document.getElementById('m-ns').value.trim(),
+      window: document.getElementById('m-window').value.trim()
+    });
+    const path = `/api/apps/${app}/metrics?${params}`;
+    const cards = document.getElementById('m-cards');
+    cards.innerHTML = '';
+    try {
+      const result = await call(path);
+      show('m', result, path);
+      if (result.status === 200) {
+        const c = result.body.current;
+        const peak = result.body.series.reduce((max, p) => Math.max(max, p.errorRate), 0);
+        cards.innerHTML =
+          card('분당 요청 (최근 1분)', c.requestsPerMinute.toFixed(1)) +
+          card('에러율 (최근 1분)', (c.errorRate * 100).toFixed(1) + '%', errorClass(c.errorRate, c.requestsPerMinute)) +
+          card('평균 응답 (최근 1분)', c.avgLatencyMs.toFixed(0) + 'ms') +
+          card('구간 최고 에러율', (peak * 100).toFixed(1) + '%') +
+          card('추이 점 개수', result.body.series.length);
+      }
+    } catch (e) {
+      document.getElementById('m-status').textContent = '요청 실패: ' + e.message;
+    }
+  });
+
+  document.getElementById('l-run').addEventListener('click', async () => {
+    const app = encodeURIComponent(document.getElementById('l-app').value.trim());
+    const params = new URLSearchParams({
+      namespace: document.getElementById('l-ns').value.trim(),
+      since: document.getElementById('l-since').value.trim(),
+      level: document.getElementById('l-level').value,
+      limit: document.getElementById('l-limit').value.trim()
+    });
+    const path = `/api/apps/${app}/logs?${params}`;
+    try {
+      show('l', await call(path), path);
+    } catch (e) {
+      document.getElementById('l-status').textContent = '요청 실패: ' + e.message;
+    }
+  });
+</script>
+</body>
+</html>
