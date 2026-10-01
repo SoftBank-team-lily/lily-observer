@@ -50,11 +50,11 @@ public class KubernetesClusterSource implements ClusterSource {
     public List<AppSummary> apps(String namespace) {
         List<Deployment> deployments = call(() -> k8s.apps().deployments().inNamespace(namespace)
                 .withLabel("app").list().getItems());
-        Map<String, String> hosts = new HashMap<>();
+        Map<String, List<String>> hosts = new HashMap<>();
         for (Ingress ingress : call(() -> k8s.network().v1().ingresses().inNamespace(namespace).list().getItems())) {
-            if (ingress.getSpec() != null && ingress.getSpec().getRules() != null
-                    && !ingress.getSpec().getRules().isEmpty()) {
-                hosts.put(ingress.getMetadata().getName(), ingress.getSpec().getRules().get(0).getHost());
+            if (ingress.getSpec() != null && ingress.getSpec().getRules() != null) {
+                hosts.put(ingress.getMetadata().getName(), ingress.getSpec().getRules().stream()
+                        .map(rule -> rule.getHost()).filter(Objects::nonNull).toList());
             }
         }
 
@@ -69,13 +69,25 @@ public class KubernetesClusterSource implements ClusterSource {
         List<AppSummary> apps = new ArrayList<>();
         byApp.forEach((app, slots) -> {
             Service service = call(() -> k8s.services().inNamespace(namespace).withName(app + "-svc").get());
-            apps.add(summary(app, namespace, slots, service, hosts.get(app + "-ingress")));
+            apps.add(summary(app, namespace, slots, service, url(hosts.get(app + "-ingress"))));
         });
         apps.sort(Comparator.comparing(AppSummary::app));
         return apps;
     }
 
-    static AppSummary summary(String app, String namespace, List<Deployment> slots, Service service, String host) {
+    /**
+     * 예전 앱은 nip.io(http)와 apps.lilycloud.kr(https) 두 주소를 가진다. TLS 가 있는 도메인 주소를 먼저 쓴다.
+     */
+    static String url(List<String> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return null;
+        }
+        return hosts.stream().filter(host -> !host.endsWith(".nip.io")).findFirst()
+                .map(host -> "https://" + host)
+                .orElse("http://" + hosts.get(0));
+    }
+
+    static AppSummary summary(String app, String namespace, List<Deployment> slots, Service service, String url) {
         boolean canary = slots.stream().anyMatch(d -> templateLabels(d).containsKey("track"));
         String active;
         if (canary) {
@@ -105,7 +117,7 @@ public class KubernetesClusterSource implements ClusterSource {
             }
         }
         rows.sort(Comparator.comparing(AppSummary.SlotDeployment::name));
-        return new AppSummary(app, namespace, host == null ? null : "https://" + host,
+        return new AppSummary(app, namespace, url,
                 canary ? "canary" : "blue-green", active, ready, desired, activeImage, rows);
     }
 
@@ -203,14 +215,13 @@ public class KubernetesClusterSource implements ClusterSource {
         Double cpuUsed = null;
         Double memoryUsed = null;
         if (metrics != null && metrics.getUsage() != null) {
-            cpuUsed = round(amount(metrics.getUsage().get("cpu")));
-            memoryUsed = round(amount(metrics.getUsage().get("memory")) / 1024 / 1024);
+            cpuUsed = amount(metrics.getUsage().get("cpu"));
+            memoryUsed = amount(metrics.getUsage().get("memory")) / 1024 / 1024;
         }
         return new NodeStatus(node.getMetadata().getName(),
                 labels.containsKey(CONTROL_PLANE) ? "server" : "worker",
-                labels.get("node.kubernetes.io/instance-type"),
-                ready, cpuCores, cpuUsed, percent(cpuUsed, cpuCores),
-                round(memoryMiB), memoryUsed, percent(memoryUsed, memoryMiB), pods);
+                ready, cpuCores, cpuUsed == null ? null : round3(cpuUsed), percent(cpuUsed, cpuCores),
+                round(memoryMiB), memoryUsed == null ? null : round(memoryUsed), percent(memoryUsed, memoryMiB), pods);
     }
 
     private static Map<String, String> templateLabels(Deployment deployment) {
@@ -241,6 +252,10 @@ public class KubernetesClusterSource implements ClusterSource {
 
     private static Double percent(Double used, double total) {
         return used == null || total <= 0 ? null : round(used / total * 100);
+    }
+
+    private static double round3(double value) {
+        return Math.round(value * 1000) / 1000.0;
     }
 
     private static double round(double value) {

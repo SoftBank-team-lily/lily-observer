@@ -181,7 +181,7 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 감시 대상 모델 (`watch`) | 작성 |
 | 감시 루프 · 롤백 호출 | 보류 (lily-cicd와 역할 합의) |
 | 지표 · 로그 조회 API (`api`, `logs`) | 클러스터에서 동작 확인 |
-| 패널 상태 · 파드 · 서버 · 앱 목록 API, p95, Swagger | 구현 (클러스터 반영 전) |
+| 패널 상태 · 파드 · 서버 · 앱 목록 API, p95, Swagger | 클러스터에서 동작 확인 |
 | 판정 이력 저장 | 예정 |
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`, ingress-nginx 수집) | 적용 완료 |
 | Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |

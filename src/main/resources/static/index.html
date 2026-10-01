@@ -210,7 +210,7 @@ export async function GET(req: Request, { params }: { params: Promise&lt;{ path:
     <div class="table-wrap"><table>
       <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
       <tr><td><code>app</code></td><td>문자열</td><td>앱 이름. 다른 API의 <code>{app}</code>에 그대로 씁니다</td></tr>
-      <tr><td><code>url</code></td><td>문자열 | null</td><td>접속 주소 (Ingress 호스트)</td></tr>
+      <tr><td><code>url</code></td><td>문자열 | null</td><td>접속 주소 (Ingress 호스트). 주소가 여러 개면 <code>apps.lilycloud.kr</code>(https)를 먼저, nip.io만 있으면 http</td></tr>
       <tr><td><code>strategy</code></td><td><code>blue-green</code> | <code>canary</code></td><td>배포 방식</td></tr>
       <tr><td><code>activeSlot</code></td><td>문자열 | null</td><td>지금 트래픽을 받는 슬롯. 블루그린은 Service가 가리키는 색, 카나리는 <code>stable</code></td></tr>
       <tr><td><code>readyReplicas</code> / <code>replicas</code></td><td>숫자</td><td>준비된 파드 수 / 원하는 파드 수 (모든 슬롯 합)</td></tr>
@@ -374,16 +374,15 @@ export async function GET(req: Request, { params }: { params: Promise&lt;{ path:
     <div class="table-wrap"><table>
       <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
       <tr><td><code>name</code> / <code>role</code></td><td>문자열</td><td>노드 이름, <code>server</code>(control-plane) 또는 <code>worker</code></td></tr>
-      <tr><td><code>instanceType</code></td><td>문자열 | null</td><td>EC2 인스턴스 타입</td></tr>
       <tr><td><code>ready</code></td><td>boolean</td><td>쿠버네티스가 정상으로 보는지</td></tr>
       <tr><td><code>cpuCores</code> / <code>cpuUsedCores</code> / <code>cpuPercent</code></td><td>숫자</td><td>파드가 쓸 수 있는 코어 / 지금 쓰는 코어 / 사용률(%)</td></tr>
       <tr><td><code>memoryMiB</code> / <code>memoryUsedMiB</code> / <code>memoryPercent</code></td><td>숫자</td><td>쓸 수 있는 메모리 / 지금 쓰는 메모리 / 사용률(%)</td></tr>
       <tr><td><code>pods</code></td><td>숫자</td><td>이 서버에서 도는 파드 수</td></tr>
     </table></div>
 <pre>[
-  { "name": "ip-172-31-10-248", "role": "server", "instanceType": "t3.medium", "ready": true,
-    "cpuCores": 2.0, "cpuUsedCores": 0.4, "cpuPercent": 20.0,
-    "memoryMiB": 3800.0, "memoryUsedMiB": 1520.0, "memoryPercent": 40.0, "pods": 14 }
+  { "name": "ip-172-31-10-248", "role": "server", "ready": true,
+    "cpuCores": 2.0, "cpuUsedCores": 0.084, "cpuPercent": 4.2,
+    "memoryMiB": 3834.0, "memoryUsedMiB": 1790.4, "memoryPercent": 46.7, "pods": 8 }
 ]</pre>
     <div class="try"><b>직접 호출</b>
       <div class="row"><button type="button" data-run="nodes">조회</button></div>
@@ -402,7 +401,7 @@ export async function GET(req: Request, { params }: { params: Promise&lt;{ path:
       <tr><td>로그 메시지 추출</td><td>일반 글, 또는 JSON 로그의 <code>message</code> · <code>msg</code> (logback, pino, zap, zerolog 등)</td><td>다른 필드 이름의 JSON 로그는 원문 그대로</td></tr>
       <tr><td><code>level=error</code></td><td>줄에 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code></td><td>소문자 <code>error</code>만, 숫자 레벨(<code>"level":50</code>)만 있는 로그. <code>level=all</code>로는 보임</td></tr>
     </table></div>
-    <p class="muted">확인된 앱 (2026-10-01): lily-test(Spring Boot) 지표 · 로그, book-club-frontend 지표(200), blog 지표(500).</p>
+    <p class="muted">확인된 앱 (2026-10-01): lily-test(Spring Boot) 지표 · 로그 · 파드, book-club-frontend 지표(200), blog 지표(500) · 앱 목록. 클러스터에서 앱 목록 · 파드 상태 · 서버 API 동작 확인.</p>
   </section>
 
   <section id="risk">

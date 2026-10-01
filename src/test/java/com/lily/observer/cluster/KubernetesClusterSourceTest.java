@@ -83,23 +83,21 @@ class KubernetesClusterSourceTest {
     void nodeStatusComputesUsagePercent() {
         Node node = new NodeBuilder()
                 .withNewMetadata().withName("ip-172-31-10-248")
-                .withLabels(Map.of("node-role.kubernetes.io/control-plane", "true",
-                        "node.kubernetes.io/instance-type", "t3.medium")).endMetadata()
+                .withLabels(Map.of("node-role.kubernetes.io/control-plane", "true")).endMetadata()
                 .withNewStatus()
                 .addNewCondition().withType("Ready").withStatus("True").endCondition()
                 .withAllocatable(Map.of("cpu", new Quantity("2"), "memory", new Quantity("4000Mi")))
                 .endStatus().build();
         NodeMetrics usage = new NodeMetricsBuilder().withNewMetadata().withName("ip-172-31-10-248").endMetadata()
-                .withUsage(Map.of("cpu", new Quantity("500m"), "memory", new Quantity("1000Mi"))).build();
+                .withUsage(Map.of("cpu", new Quantity("84m"), "memory", new Quantity("1000Mi"))).build();
 
         NodeStatus status = KubernetesClusterSource.status(node, usage, 14);
 
         assertThat(status.role()).isEqualTo("server");
-        assertThat(status.instanceType()).isEqualTo("t3.medium");
         assertThat(status.ready()).isTrue();
         assertThat(status.cpuCores()).isEqualTo(2.0);
-        assertThat(status.cpuUsedCores()).isEqualTo(0.5);
-        assertThat(status.cpuPercent()).isEqualTo(25.0);
+        assertThat(status.cpuUsedCores()).isEqualTo(0.084);   // 0.1 로 뭉개지지 않게
+        assertThat(status.cpuPercent()).isEqualTo(4.2);
         assertThat(status.memoryPercent()).isEqualTo(25.0);
         assertThat(status.pods()).isEqualTo(14);
     }
@@ -123,7 +121,7 @@ class KubernetesClusterSourceTest {
         AppSummary summary = KubernetesClusterSource.summary("lily-test", "default",
                 List.of(deployment("lily-test-green", "color", "green", 1, 1),
                         deployment("lily-test-blue", "color", "blue", 0, 0)),
-                service, "lily-test.apps.lilycloud.kr");
+                service, "https://lily-test.apps.lilycloud.kr");
 
         assertThat(summary.strategy()).isEqualTo("blue-green");
         assertThat(summary.activeSlot()).isEqualTo("green");
@@ -131,6 +129,15 @@ class KubernetesClusterSourceTest {
         assertThat(summary.url()).isEqualTo("https://lily-test.apps.lilycloud.kr");
         assertThat(summary.readyReplicas()).isEqualTo(1);
         assertThat(summary.deployments()).extracting(AppSummary.SlotDeployment::slot).containsExactly("blue", "green");
+    }
+
+    @Test
+    void urlPrefersTheTlsDomainOverNipIo() {
+        assertThat(KubernetesClusterSource.url(List.of("blog.43.200.152.53.nip.io", "blog.apps.lilycloud.kr")))
+                .isEqualTo("https://blog.apps.lilycloud.kr");
+        assertThat(KubernetesClusterSource.url(List.of("old.43.200.152.53.nip.io")))
+                .isEqualTo("http://old.43.200.152.53.nip.io");
+        assertThat(KubernetesClusterSource.url(List.of())).isNull();
     }
 
     @Test

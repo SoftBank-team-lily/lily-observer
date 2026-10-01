@@ -18,10 +18,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record NodeStatus(
         @Schema(example = "ip-172-31-10-248") String name,
         @Schema(description = "server (control-plane) · worker", example = "server") String role,
-        @Schema(description = "EC2 인스턴스 타입", nullable = true, example = "t3.medium") String instanceType,
         @Schema(description = "쿠버네티스가 정상으로 보는지", example = "true") boolean ready,
         @Schema(description = "파드가 쓸 수 있는 CPU 코어 수", example = "2.0") double cpuCores,
-        @Schema(description = "지금 쓰는 코어 수", nullable = true, example = "0.4") Double cpuUsedCores,
+        @Schema(description = "지금 쓰는 코어 수 (소수 셋째 자리)", nullable = true, example = "0.084") Double cpuUsedCores,
         @Schema(description = "CPU 사용률 (%)", nullable = true, example = "20.0") Double cpuPercent,
         @Schema(description = "파드가 쓸 수 있는 메모리 (MiB)", example = "3800.0") double memoryMiB,
         @Schema(description = "지금 쓰는 메모리 (MiB)", nullable = true, example = "1520.0") Double memoryUsedMiB,
