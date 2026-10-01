@@ -16,7 +16,8 @@ public record ObserverProperties(
         Store store
 ) {
 
-    public record Prometheus(String url, String requestMetric) {}
+    /** @param ingressName lily-cicd 의 Ingress 이름 규칙. %s 에 앱 이름이 들어간다 */
+    public record Prometheus(String url, String ingressName) {}
 
     public record Watch(Duration interval, Duration window) {}
 

@@ -9,27 +9,28 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Prometheus HTTP API 로 슬롯별 지표를 계산한다.
+ * Prometheus HTTP API 로 앱별 요청 지표를 계산한다.
  *
- * <p>lily-cicd 는 파드에 {@code app} 과 슬롯 라벨({@code track}: stable/canary, {@code color}: blue/green)을 붙인다.
- * canary 는 Service 하나 뒤에서 파드 수 비율로 트래픽을 나누기 때문에 Nginx 지표로는 버전을 구분할 수 없다.
- * 그래서 Prometheus 가 파드마다 {@code /actuator/prometheus} 를 긁고, 두 슬롯 라벨을 {@code slot} 하나로 합친다
- * (deploy/k3s/prometheus.yaml 의 relabel 규칙).
+ * <p>모든 앱 요청은 ingress-nginx 를 지나가고, Prometheus 가 그 입구의 숫자를 모은다
+ * (deploy/k3s/prometheus.yaml). 그래서 앱이 Spring 이든 Node 든 같은 방식으로 본다.
+ * lily-cicd 는 앱마다 Ingress 를 {@code {app}-ingress} 로 만든다 (observer.prometheus.ingress-name).
  */
 @Component
 public class PrometheusMetricsSource implements MetricsSource {
 
     private static final Logger log = LoggerFactory.getLogger(PrometheusMetricsSource.class);
 
-    // probe 요청은 에러율 계산에서 뺀다
-    private static final String FILTER = "namespace=\"%s\",app=\"%s\",slot=\"%s\",uri!~\"/actuator.*\"";
+    private static final String REQUESTS = "nginx_ingress_controller_requests";
+    private static final String DURATION = "nginx_ingress_controller_request_duration_seconds";
+    private static final String FILTER = "namespace=\"%s\",ingress=\"%s\"";
 
     private final RestClient http;
-    private final String metric;
+    private final String ingressName;
 
     public PrometheusMetricsSource(ObserverProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
@@ -39,28 +40,35 @@ public class PrometheusMetricsSource implements MetricsSource {
                 .requestFactory(requestFactory)
                 .baseUrl(properties.prometheus().url())
                 .build();
-        this.metric = properties.prometheus().requestMetric();
+        this.ingressName = properties.prometheus().ingressName();
     }
 
     @Override
-    public SlotMetrics slot(String namespace, String app, String slot) {
-        String filter = String.format(FILTER, namespace, app, slot);
-        double total = query("sum(rate(" + metric + "_count{" + filter + "}[1m])) * 60");
+    public TrafficMetrics traffic(String namespace, String app, Instant at, Duration window) {
+        String filter = String.format(FILTER, namespace, String.format(ingressName, app));
+        String range = "[" + window.toSeconds() + "s]";
+        double perMinute = 60.0 / window.toSeconds();
+
+        double total = query("sum(increase(" + REQUESTS + "{" + filter + "}" + range + "))", at) * perMinute;
         if (total <= 0) {
-            return SlotMetrics.empty(slot);
+            return TrafficMetrics.empty();
         }
-        double errors = query("sum(rate(" + metric + "_count{" + filter + ",status=~\"5..\"}[1m])) * 60");
-        double latencySeconds = query("sum(rate(" + metric + "_sum{" + filter + "}[1m]))"
-                + " / sum(rate(" + metric + "_count{" + filter + "}[1m]))");
-        return new SlotMetrics(slot, total, errors / total, latencySeconds * 1000);
+        double errors = query("sum(increase(" + REQUESTS + "{" + filter + ",status=~\"5..\"}" + range + "))", at)
+                * perMinute;
+        double latencySeconds = query("sum(rate(" + DURATION + "_sum{" + filter + "}" + range + "))"
+                + " / sum(rate(" + DURATION + "_count{" + filter + "}" + range + "))", at);
+        return new TrafficMetrics(total, errors / total, latencySeconds * 1000);
     }
 
     /** 결과가 없으면 0. Prometheus 가 죽어 있으면 예외를 던져 이번 판정을 건너뛰게 한다 */
-    double query(String promql) {
+    double query(String promql, Instant at) {
         QueryResponse response;
         try {
             response = http.get()
-                    .uri(uri -> uri.path("/api/v1/query").queryParam("query", "{q}").build(promql))
+                    .uri(uri -> uri.path("/api/v1/query")
+                            .queryParam("query", "{q}")
+                            .queryParam("time", at.getEpochSecond())
+                            .build(promql))
                     .retrieve()
                     .body(QueryResponse.class);
         } catch (RestClientException e) {

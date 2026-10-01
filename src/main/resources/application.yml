@@ -32,8 +32,8 @@ observer:
   prometheus:
     # 클러스터 안 Prometheus. 로컬에서는 port-forward 한 주소
     url: ${PROMETHEUS_URL:http://prometheus.lily-system.svc:9090}
-    # 앱 지표 이름 (Spring Boot Micrometer 기본값, lily-blog-sample 계약)
-    request-metric: ${REQUEST_METRIC:http_server_requests_seconds}
+    # 지표는 ingress-nginx 입구에서 센다. lily-cicd 가 만드는 Ingress 이름 규칙 ({app}-ingress)
+    ingress-name: ${INGRESS_NAME:%s-ingress}
 
   watch:
     # 판정 주기와 감시 기간. 감시 기간이 지나도록 위험이 없으면 PASSED 로 끝낸다

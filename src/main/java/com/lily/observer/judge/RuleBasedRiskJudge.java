@@ -1,14 +1,14 @@
 package com.lily.observer.judge;
 
 import com.lily.observer.ObserverProperties;
-import com.lily.observer.metrics.SlotMetrics;
+import com.lily.observer.metrics.TrafficMetrics;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
 
 /**
- * 기본 규칙. 에러율이 가장 강한 신호이고, 응답 시간은 기준 슬롯이 있을 때만 본다.
+ * 기본 규칙. 에러율이 가장 강한 신호이고, 응답 시간은 기준(배포 전) 지표가 있을 때만 본다.
  *
  * <pre>
  * 요청 &lt; min-requests                         → HOLD
@@ -34,7 +34,7 @@ public class RuleBasedRiskJudge implements RiskJudge {
     }
 
     @Override
-    public Judgment judge(String app, SlotMetrics target, SlotMetrics baseline) {
+    public Judgment judge(String app, TrafficMetrics target, TrafficMetrics baseline) {
         Instant now = clock.instant();
         if (target.requestsPerMinute() < rules.minRequests()) {
             return new Judgment(app, RiskLevel.HOLD,
@@ -68,7 +68,7 @@ public class RuleBasedRiskJudge implements RiskJudge {
                 target, baseline, now);
     }
 
-    private boolean slowerThanBaseline(SlotMetrics target, SlotMetrics baseline) {
+    private boolean slowerThanBaseline(TrafficMetrics target, TrafficMetrics baseline) {
         return baseline != null
                 && baseline.requestsPerMinute() >= rules.minRequests()
                 && baseline.avgLatencyMs() > 0
