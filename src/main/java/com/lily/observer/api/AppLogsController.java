@@ -4,6 +4,8 @@ import com.lily.observer.logs.LogEntry;
 import com.lily.observer.logs.LogSource;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,7 @@ import java.util.List;
 /**
  * 대시보드 · AI 진단용 앱 로그 조회. 로그마다 파드 · 슬롯 · 이미지 버전이 붙어 어떤 배포에서 난 로그인지 보인다.
  */
+@Tag(name = "로그", description = "CloudWatch Logs 의 앱 로그 (파드 · 슬롯 · 이미지 버전 포함)")
 @Validated
 @RestController
 @RequestMapping("/api/apps/{app}")
@@ -39,6 +42,8 @@ public class AppLogsController {
      * @param level error 면 ERROR · Exception 이 들어간 줄만, all 이면 전부
      * @param limit 최근 것부터 최대 개수. 결과는 오래된 순
      */
+    @Operation(summary = "앱 로그",
+            description = "최근 로그. level=error 면 ERROR · Exception · Error · panic · Traceback 이 들어간 줄만. 결과는 오래된 순, 최근 limit 개.")
     @GetMapping("/logs")
     public List<LogEntry> logs(@PathVariable @Pattern(regexp = AppMetricsController.NAME) String app,
                                @RequestParam(defaultValue = "default") @Pattern(regexp = AppMetricsController.NAME)

@@ -3,6 +3,8 @@ package com.lily.observer.api;
 import com.lily.observer.metrics.MetricsSource;
 import com.lily.observer.metrics.TrafficMetrics;
 import com.lily.observer.metrics.TrafficPoint;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,7 @@ import java.util.List;
 /**
  * 대시보드 · AI 진단용 앱 지표 조회. ingress-nginx 입구 기준이라 앱 언어와 상관없다.
  */
+@Tag(name = "지표", description = "요청 수 · 에러율 · 응답 시간 (ingress-nginx 기준, 모든 앱)")
 @Validated
 @RestController
 @RequestMapping("/api/apps/{app}")
@@ -39,6 +42,8 @@ public class AppMetricsController {
     /**
      * @param window 추이 구간 (예: 10m, 1h). 1분 ~ 6시간
      */
+    @Operation(summary = "앱 요청 지표",
+            description = "최근 1분 요약(current, 카드용)과 30초 간격 추이(series, 그래프용). 요청이 없던 앱은 current 가 0, series 가 빈 배열.")
     @GetMapping("/metrics")
     public AppMetrics metrics(@PathVariable @Pattern(regexp = NAME) String app,
                               @RequestParam(defaultValue = "default") @Pattern(regexp = NAME) String namespace,

@@ -60,6 +60,9 @@ class PrometheusMetricsSourceTest {
             if (query.contains("status=~\"5..\"")) {
                 return vector("10");
             }
+            if (query.contains("histogram_quantile(0.95")) {
+                return vector("0.045");
+            }
             if (query.contains("request_duration_seconds")) {
                 return vector("0.02");
             }
@@ -72,6 +75,8 @@ class PrometheusMetricsSourceTest {
         assertThat(traffic.requestsPerMinute()).isCloseTo(40, within(0.001));   // 200 / 5분
         assertThat(traffic.errorRate()).isCloseTo(0.05, within(0.001));         // 10 / 200
         assertThat(traffic.avgLatencyMs()).isCloseTo(20, within(0.001));
+        assertThat(traffic.p95LatencyMs()).isCloseTo(45, within(0.001));
+        assertThat(queries).anyMatch(q -> q.contains("_bucket{namespace=\"default\",ingress=\"lily-test-ingress\"}"));
         assertThat(queries).allMatch(q -> q.contains("namespace=\"default\",ingress=\"lily-test-ingress\""));
         assertThat(queries.get(0)).contains("time=1790834400");
     }
@@ -92,6 +97,9 @@ class PrometheusMetricsSourceTest {
             if (query.contains("status=~\"5..\"")) {
                 return matrix("[1790834400,\"6\"]");                      // 두 번째 시각에는 에러 없음
             }
+            if (query.contains("histogram_quantile(0.95")) {
+                return matrix("[1790834400,\"0.05\"]");
+            }
             if (query.contains("request_duration_seconds")) {
                 return matrix("[1790834400,\"0.015\"],[1790834430,\"0.03\"]");
             }
@@ -105,6 +113,8 @@ class PrometheusMetricsSourceTest {
         assertThat(series.get(0).at()).isEqualTo(Instant.parse("2026-10-01T06:00:00Z"));
         assertThat(series.get(0).errorRate()).isCloseTo(0.1, within(0.001));
         assertThat(series.get(0).avgLatencyMs()).isCloseTo(15, within(0.001));
+        assertThat(series.get(0).p95LatencyMs()).isCloseTo(50, within(0.001));
+        assertThat(series.get(1).p95LatencyMs()).isZero();
         assertThat(series.get(1).requestsPerMinute()).isCloseTo(30, within(0.001));
         assertThat(series.get(1).errorRate()).isZero();
         assertThat(queries).allMatch(q -> q.startsWith("/api/v1/query_range?") && q.contains("step=30"));

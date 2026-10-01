@@ -1,5 +1,6 @@
 package com.lily.observer.api;
 
+import com.lily.observer.cluster.ClusterUnavailableException;
 import com.lily.observer.logs.LogsUnavailableException;
 import com.lily.observer.metrics.MetricsUnavailableException;
 import jakarta.validation.ConstraintViolationException;
@@ -15,7 +16,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler({MetricsUnavailableException.class, LogsUnavailableException.class})
+    @ExceptionHandler({MetricsUnavailableException.class, LogsUnavailableException.class,
+            ClusterUnavailableException.class})
     ResponseEntity<Map<String, String>> unavailable(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("message", e.getMessage()));
     }

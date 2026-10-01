@@ -14,7 +14,7 @@ import java.time.Instant;
  * <pre>
  * 요청 &lt; min-requests                         → HOLD
  * 에러율 ≥ critical                            → CRITICAL (롤백)
- * 에러율 ≥ warning  또는 응답 시간 ≥ 기준 x ratio → WARNING
+ * 에러율 ≥ warning  또는 p95 응답 시간 ≥ 기준 x ratio → WARNING
  * 에러율 ≥ notice                              → NOTICE
  * 그 외                                        → NORMAL
  * </pre>
@@ -55,9 +55,10 @@ public class RuleBasedRiskJudge implements RiskJudge {
                     target, baseline, now);
         }
         if (slowerThanBaseline(target, baseline)) {
+            boolean p95 = useP95(target, baseline);
             return new Judgment(app, RiskLevel.WARNING,
-                    String.format("응답 %.0fms ≥ 기준 %.0fms x %.1f",
-                            target.avgLatencyMs(), baseline.avgLatencyMs(), rules.latencyRatio()),
+                    String.format("%s 응답 %.0fms ≥ 기준 %.0fms x %.1f", p95 ? "p95" : "평균",
+                            latency(target, p95), latency(baseline, p95), rules.latencyRatio()),
                     target, baseline, now);
         }
         if (errorRate >= rules.noticeErrorRate()) {
@@ -71,9 +72,20 @@ public class RuleBasedRiskJudge implements RiskJudge {
     }
 
     private boolean slowerThanBaseline(TrafficMetrics target, TrafficMetrics baseline) {
-        return baseline != null
-                && baseline.requestsPerMinute() >= rules.minRequests()
-                && baseline.avgLatencyMs() > 0
-                && target.avgLatencyMs() >= baseline.avgLatencyMs() * rules.latencyRatio();
+        if (baseline == null || baseline.requestsPerMinute() < rules.minRequests()) {
+            return false;
+        }
+        boolean p95 = useP95(target, baseline);
+        double base = latency(baseline, p95);
+        return base > 0 && latency(target, p95) >= base * rules.latencyRatio();
+    }
+
+    /** 느린 요청은 평균에 묻히므로 p95 를 먼저 본다. 둘 중 하나라도 p95 가 없으면 평균 */
+    private static boolean useP95(TrafficMetrics target, TrafficMetrics baseline) {
+        return target.p95LatencyMs() > 0 && baseline.p95LatencyMs() > 0;
+    }
+
+    private static double latency(TrafficMetrics metrics, boolean p95) {
+        return p95 ? metrics.p95LatencyMs() : metrics.avgLatencyMs();
     }
 }

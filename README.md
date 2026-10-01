@@ -88,7 +88,7 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 보류 | 요청 20/분 미만 | 판정하지 않음 | 회색 |
 | 0 정상 | 5xx 1% 미만 | 없음 | 초록 |
 | 1 알림 | 5xx 1% 이상 | 기록 | 초록 |
-| 2 주의 | 5xx 2% 이상, 또는 응답 시간이 배포 전의 2배 이상 | 주의 알림 | 노랑 |
+| 2 주의 | 5xx 2% 이상, 또는 p95 응답 시간이 기준(15분 전 ~ 5분 전)의 2배 이상 | 주의 알림 | 노랑 |
 | 3 위험 | 5xx 5% 이상 | **자동 롤백** | 빨강 |
 
 - 같은 등급이 **연속 2번** 나와야 조치해요 (순간 스파이크 무시)
@@ -110,11 +110,17 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 
 | Method | Path | 설명 | 상태 |
 |---|---|---|---|
-| GET | `/api/apps/{app}/metrics` | 최근 1분 요청 수 · 에러율 · 응답 시간 + 30초 간격 추이 (ingress 기준) | 구현 |
+| GET | `/api/apps` | 배포된 앱 목록 (주소, 배포 방식, 활성 슬롯, 파드 수, 이미지) | 구현 |
+| GET | `/api/apps/{app}/status` | 패널 색(gray · green · yellow · red) + 한 줄 문구 + 판정 근거 | 구현 |
+| GET | `/api/apps/{app}/metrics` | 최근 1분 요청 수 · 에러율 · 평균 · p95 응답 시간 + 30초 간격 추이 (ingress 기준) | 구현 |
+| GET | `/api/apps/{app}/pods` | 파드별 Ready · 재시작 · 버전 · 문제(CrashLoop · OOMKilled) · CPU · 메모리 | 구현 |
 | GET | `/api/apps/{app}/logs` | 최근 로그. 줄마다 파드 · 슬롯 · 이미지 버전 (CloudWatch Logs) | 구현 |
-| GET | `/api/apps/{app}/risk` | 현재 위험도와 판정 이력 | 예정 |
-| GET | `/api/nodes` | 서버별 CPU · 메모리 | 예정 |
+| GET | `/api/nodes` | 서버별 CPU · 메모리 사용률, Ready, 파드 수 (metrics-server) | 구현 |
+| GET | `/api/apps/{app}/risk` | 판정 이력 | 예정 |
 | POST | `/api/monitors` | lily-cicd가 배포 완료를 알림 → 감시 시작 | 보류 |
+
+- 전체 파라미터 · 응답 필드 · 연동 가이드: 메인 페이지 `/`
+- 바로 호출: Swagger UI `/swagger-ui.html`, OpenAPI 명세 `/v3/api-docs` (프론트 타입 자동 생성 가능)
 
 ### `GET /api/apps/{app}/metrics`
 
@@ -175,6 +181,7 @@ lily-cicd ──(DeployMonitor)──▶  lily-observer  ──(롤백 요청)�
 | 감시 대상 모델 (`watch`) | 작성 |
 | 감시 루프 · 롤백 호출 | 보류 (lily-cicd와 역할 합의) |
 | 지표 · 로그 조회 API (`api`, `logs`) | 클러스터에서 동작 확인 |
+| 패널 상태 · 파드 · 서버 · 앱 목록 API, p95, Swagger | 구현 (클러스터 반영 전) |
 | 판정 이력 저장 | 예정 |
 | Prometheus 배포 설정 (`deploy/k3s/prometheus.yaml`, ingress-nginx 수집) | 적용 완료 |
 | Fluent Bit 배포 설정 (`deploy/k3s/fluent-bit.yaml`, CloudWatch Logs `/lily/apps`) | 적용 완료 |
@@ -197,8 +204,13 @@ src/main/java/com/lily/observer/
 ├─ api/                         조회 API
 │  ├─ AppMetricsController.java GET /api/apps/{app}/metrics
 │  ├─ AppLogsController.java    GET /api/apps/{app}/logs
+│  ├─ AppStatusController.java  GET /api/apps/{app}/status
+│  ├─ ClusterController.java    GET /api/apps, /api/apps/{app}/pods, /api/nodes
+│  ├─ OpenApiConfig.java        Swagger · OpenAPI 명세
 │  ├─ ApiTokenFilter.java       Bearer 토큰 인증
 │  └─ ApiExceptionHandler.java  에러 → {"message"}
+├─ cluster/                     쿠버네티스 · metrics-server 조회 (앱 목록, 파드, 서버)
+├─ status/                      패널 상태 (판정 규칙으로 색 · 문구)
 ├─ logs/                        로그 조회
 │  ├─ LogSource.java
 │  ├─ CloudWatchLogSource.java  /lily/apps 에서 앱 스트림만, 파드 · 슬롯 · 이미지 추출

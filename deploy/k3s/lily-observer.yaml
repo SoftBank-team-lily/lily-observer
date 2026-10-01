@@ -7,6 +7,45 @@
 # - 클러스터 안에서만 연다 (ClusterIP). 확인은 port-forward 로 한다
 # - API 토큰은 Secret lily-observer-env 의 OBSERVABILITY_API_TOKEN. Secret 이 없으면 인증이 꺼진다
 #     sudo kubectl -n lily-system create secret generic lily-observer-env --from-literal=OBSERVABILITY_API_TOKEN=<토큰>
+# - 앱 목록 · 파드 상태 · 서버 지표를 위해 쿠버네티스를 조회만 한다 (아래 ClusterRole, 쓰기 권한 없음)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lily-observer
+  namespace: lily-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lily-observer-read
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "services"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  # metrics-server (k3s 기본 설치): 파드 · 서버 CPU · 메모리 사용량
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lily-observer-read
+subjects:
+  - kind: ServiceAccount
+    name: lily-observer
+    namespace: lily-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lily-observer-read
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +63,7 @@ spec:
       labels:
         app: lily-observer
     spec:
+      serviceAccountName: lily-observer
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
       tolerations:

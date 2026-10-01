@@ -8,7 +8,7 @@ public enum RiskLevel {
     HOLD(-1, "판정 보류", "gray"),
     NORMAL(0, "없음", "green"),
     NOTICE(1, "알림", "green"),
-    WARNING(2, "카나리 중단 권고", "yellow"),
+    WARNING(2, "주의 알림", "yellow"),
     CRITICAL(3, "롤백", "red");
 
     private final int score;

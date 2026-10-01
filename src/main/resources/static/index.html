@@ -22,16 +22,21 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
-  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 80px; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 80px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
   header h1 { margin: 0; font-size: 26px; }
   header p { margin: 4px 0 0; color: var(--muted); }
+  .links { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-link { display: inline-block; padding: 7px 14px; border-radius: 6px; text-decoration: none; font-size: 14px;
+              border: 1px solid var(--accent); color: var(--accent); }
+  .btn-link.primary { background: var(--accent); color: #fff; }
   nav { margin: 20px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
   nav a { color: var(--text); text-decoration: none; padding: 4px 10px; border: 1px solid var(--line);
           border-radius: 999px; background: var(--panel); font-size: 13px; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-top: 16px; }
   h2 { margin: 0 0 12px; font-size: 19px; }
   h3 { margin: 22px 0 8px; font-size: 15px; }
-  p, li { color: var(--text); }
+  a { color: var(--accent); }
   .muted { color: var(--muted); }
   code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
   code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
@@ -47,165 +52,343 @@
   .path { font: 600 15px ui-monospace, monospace; }
   .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
   .try { border: 1px dashed var(--line); border-radius: 8px; padding: 14px; margin-top: 12px; }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 8px; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
   input, select { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
-                  background: var(--bg); color: var(--text); min-width: 120px; }
+                  background: var(--bg); color: var(--text); min-width: 110px; }
   button { font: inherit; font-size: 14px; padding: 7px 14px; border: 0; border-radius: 6px;
            background: var(--accent); color: #fff; cursor: pointer; }
   .status { font-size: 13px; margin-top: 10px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
-  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .card .label { font-size: 12px; color: var(--muted); }
-  .card .value { font-size: 22px; font-weight: 700; }
-  .lv-ok { color: var(--ok); } .lv-warn { color: var(--warn); } .lv-bad { color: var(--bad); } .lv-hold { color: var(--hold); }
+  .lv-ok, .lv-green { color: var(--ok); } .lv-warn, .lv-yellow { color: var(--warn); }
+  .lv-bad, .lv-red { color: var(--bad); } .lv-hold, .lv-gray { color: var(--hold); }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>lily-observer API</h1>
-    <p>배포된 앱의 요청 지표와 로그를 조회합니다. 대시보드와 AI 진단이 이 API를 씁니다.</p>
-    <p class="muted">대시보드를 만드는 분은 <a href="#guide">대시보드 연동 가이드</a>부터 보세요. 각 API 아래 "직접 호출"로 실제 값을 바로 확인할 수 있습니다.</p>
+    <div>
+      <h1>lily-observer API</h1>
+      <p>배포된 앱의 상태 · 지표 · 파드 · 로그 · 서버 정보를 조회합니다. 대시보드와 AI 진단이 이 API를 씁니다.</p>
+    </div>
+    <div class="links">
+      <a class="btn-link primary" href="/swagger-ui.html">Swagger UI</a>
+      <a class="btn-link" href="/v3/api-docs">OpenAPI 명세 (JSON)</a>
+    </div>
   </header>
 
   <nav>
     <a href="#guide">대시보드 연동 가이드</a>
+    <a href="#summary">API 한눈에</a>
+    <a href="#apps">앱 목록</a>
+    <a href="#status">패널 상태</a>
+    <a href="#metrics">요청 지표</a>
+    <a href="#pods">파드 상태</a>
+    <a href="#logs">로그</a>
+    <a href="#nodes">서버</a>
     <a href="#support">다른 앱 지원 범위</a>
-    <a href="#overview">개요</a>
-    <a href="#auth">인증</a>
-    <a href="#metrics">지표 조회</a>
-    <a href="#logs">로그 조회</a>
     <a href="#risk">위험도 기준</a>
     <a href="#errors">에러 응답</a>
-    <a href="#planned">예정 API</a>
   </nav>
 
+  <section id="token-box">
+    <h2>토큰</h2>
+    <p class="muted">이 페이지의 "직접 호출"에만 씁니다. 서버에 <code>OBSERVABILITY_API_TOKEN</code>이 없으면 비워 두세요. 탭을 닫으면 지워집니다.</p>
+    <input id="token" type="password" placeholder="비어 있으면 헤더 없이 요청" style="min-width:320px">
+  </section>
 
   <section id="guide">
     <h2>대시보드 연동 가이드</h2>
-    <p>lily-frontend에서 꽃을 누르면 <code>DASHBOARD_URL?project={id}</code>로 이동합니다. 그 대시보드가 이 API로 앱의 지표와 로그를 보여주는 구조입니다.</p>
+    <p>lily-frontend에서 꽃을 누르면 <code>DASHBOARD_URL?project={id}</code>로 이동합니다. 대시보드는 이 API로 앱 상태를 보여줍니다.</p>
 
     <h3>1. 어디서 호출하나요</h3>
     <div class="table-wrap"><table>
       <tr><th>상황</th><th>주소</th><th>비고</th></tr>
-      <tr><td>대시보드 서버 (클러스터 안)</td><td><code>http://lily-observer.lily-system.svc</code></td><td>운영. 같은 k3s 클러스터에 있는 서버에서만 닿습니다</td></tr>
-      <tr><td>로컬 개발</td><td><code>http://localhost:8095</code></td><td>터널 필요 (아래 명령). 이 페이지도 같은 방법으로 열립니다</td></tr>
+      <tr><td>대시보드 서버 (클러스터 안)</td><td><code>http://lily-observer.lily-system.svc</code></td><td>운영. 같은 k3s 클러스터 안의 서버에서만 닿습니다</td></tr>
+      <tr><td>로컬 개발</td><td><code>http://localhost:8095</code></td><td>아래 터널 명령. 이 페이지와 Swagger도 같은 주소</td></tr>
     </table></div>
 <pre># 내 노트북
 ssh -i ~/.ssh/lily-key.pem -L 8095:localhost:8095 ubuntu@43.200.152.53
 # 서버 (이 창은 켜둔다)
 sudo kubectl -n lily-system port-forward svc/lily-observer 8095:80</pre>
     <ul>
-      <li><b>브라우저에서 직접 부르지 마세요.</b> 이 서버는 클러스터 안에서만 열려 있고(ClusterIP), CORS를 허용하지 않으며, 토큰이 브라우저에 노출됩니다.</li>
-      <li>대시보드 서버(예: Next.js Route Handler)가 대신 부르고, 브라우저는 대시보드 서버만 부르게 합니다.</li>
+      <li><b>브라우저에서 직접 부르지 마세요.</b> 클러스터 안에서만 열려 있고(ClusterIP), CORS를 허용하지 않고, 토큰이 노출됩니다.</li>
+      <li>대시보드 서버(Next.js Route Handler 등)가 대신 부르고, 브라우저는 대시보드 서버만 부릅니다.</li>
     </ul>
 
-    <h3>2. 앱 이름</h3>
+    <h3>2. 타입 자동 생성</h3>
+    <p>OpenAPI 명세에서 TypeScript 타입을 바로 만들 수 있습니다 (터널이 켜진 상태).</p>
+<pre>npx openapi-typescript http://localhost:8095/v3/api-docs -o src/lib/observer/schema.d.ts
+
+// 사용
+import type { components } from "@/lib/observer/schema";
+type AppStatus = components["schemas"]["AppStatus"];</pre>
+
+    <h3>3. 앱 이름</h3>
     <ul>
       <li>경로의 <code>{app}</code>은 <b>배포할 때 쓴 앱 이름</b>입니다 (lily-builder · lily-cicd의 <code>appName</code>). 예: <code>lily-test</code>, <code>book-club-backend-8633c2</code></li>
-      <li>접속 주소 <code>https://{app}.apps.lilycloud.kr</code>의 앞부분과 같습니다.</li>
-      <li>대시보드는 <code>?project={id}</code>만 받으므로, 프로젝트 → 앱 이름은 lily-frontend의 프로젝트 · 배포 기록에서 찾아야 합니다.</li>
-      <li><code>namespace</code>는 지금 모든 사용자 앱이 <code>default</code>라 생략해도 됩니다.</li>
+      <li>접속 주소 <code>https://{app}.apps.lilycloud.kr</code>의 앞부분과 같습니다. <code>GET /api/apps</code> 목록의 <code>app</code> 값을 그대로 쓰면 됩니다.</li>
+      <li>대시보드는 <code>?project={id}</code>만 받으므로 프로젝트 → 앱 이름은 lily-frontend의 프로젝트 · 배포 기록에서 찾습니다.</li>
+      <li><code>namespace</code>는 모든 사용자 앱이 <code>default</code>라 생략합니다.</li>
     </ul>
 
-    <h3>3. 인증과 환경변수</h3>
-<pre># 대시보드 서버 환경변수 (권장 이름)
-OBSERVER_URL=http://lily-observer.lily-system.svc
-OBSERVER_TOKEN=...   # lily-observer 의 OBSERVABILITY_API_TOKEN 과 같은 값. 지금은 미설정(인증 꺼짐)</pre>
-    <p>모든 요청에 <code>Authorization: Bearer {OBSERVER_TOKEN}</code>을 붙입니다. 토큰이 설정되기 전에는 헤더가 없어도 됩니다.</p>
+    <h3>4. 인증 · 환경변수</h3>
+<pre>OBSERVER_URL=http://lily-observer.lily-system.svc
+OBSERVER_TOKEN=...   # lily-observer 의 OBSERVABILITY_API_TOKEN. 아직 미설정(인증 꺼짐)</pre>
+    <p>요청마다 <code>Authorization: Bearer {OBSERVER_TOKEN}</code>. 토큰이 설정되기 전에는 없어도 됩니다.</p>
 
-    <h3>4. 타입 (TypeScript)</h3>
-<pre>export type TrafficMetrics = {
-  requestsPerMinute: number; // 회/분, 최근 1분
-  errorRate: number;         // 0.0 ~ 1.0 (5xx 비율)
-  avgLatencyMs: number;      // ms, 평균
-};
-
-export type TrafficPoint = TrafficMetrics &amp; {
-  at: string;                // ISO-8601 UTC, 30초 간격
-};
-
-export type AppMetrics = {
-  app: string;
-  namespace: string;
-  current: TrafficMetrics;   // 카드
-  series: TrafficPoint[];    // 그래프 (오래된 순)
-};
-
-export type LogEntry = {
-  at: string;                // ISO-8601 UTC
-  pod: string | null;
-  slot: string | null;       // "blue" | "green" | "stable" | "canary"
-  image: string | null;      // "lily-test:20261001-053104"
-  message: string;
-};
-
-export type ObserverError = { message: string };</pre>
-
-    <h3>5. 호출 예시 (Next.js Route Handler)</h3>
-<pre>// app/api/observer/[app]/metrics/route.ts
-export async function GET(req: Request, { params }: { params: Promise&lt;{ app: string }&gt; }) {
-  const { app } = await params;
-  const window = new URL(req.url).searchParams.get("window") ?? "30m";
-  const res = await fetch(
-    `${process.env.OBSERVER_URL}/api/apps/${encodeURIComponent(app)}/metrics?window=${window}`,
-    {
-      headers: process.env.OBSERVER_TOKEN
-        ? { Authorization: `Bearer ${process.env.OBSERVER_TOKEN}` }
-        : {},
-      cache: "no-store",
-    },
-  );
+    <h3>5. 호출 예시 (Next.js Route Handler, 모든 API 공용 프록시)</h3>
+<pre>// app/api/observer/[...path]/route.ts
+export async function GET(req: Request, { params }: { params: Promise&lt;{ path: string[] }&gt; }) {
+  const { path } = await params;
+  const search = new URL(req.url).search;            // ?window=30m 등 그대로 전달
+  const res = await fetch(`${process.env.OBSERVER_URL}/api/${path.map(encodeURIComponent).join("/")}${search}`, {
+    headers: process.env.OBSERVER_TOKEN ? { Authorization: `Bearer ${process.env.OBSERVER_TOKEN}` } : {},
+    cache: "no-store",
+  });
   return new Response(await res.text(), {
     status: res.status,
     headers: { "Content-Type": "application/json" },
   });
 }
 
-// 로그도 같은 방식: /api/apps/{app}/logs?since=1h&amp;level=error&amp;limit=50</pre>
+// 브라우저: fetch("/api/observer/apps/lily-test/status")</pre>
 
-    <h3>6. 호출 주기</h3>
+    <h3>6. 화면 구성 (작업 항목과 연결)</h3>
     <div class="table-wrap"><table>
-      <tr><th>무엇</th><th>권장 주기</th><th>이유</th></tr>
-      <tr><td>지표 (<code>/metrics</code>)</td><td>15 ~ 30초</td><td>Prometheus가 15초마다 숫자를 모읍니다. 더 자주 불러도 값이 같습니다</td></tr>
-      <tr><td>로그 (<code>/logs</code>)</td><td>30초 이상, 또는 사용자가 열 때</td><td>CloudWatch 조회는 1 ~ 2초 걸리고 호출량 제한이 있습니다</td></tr>
+      <tr><th>작업</th><th>패널</th><th>API</th><th>주기</th></tr>
+      <tr><td>-</td><td>앱 선택 · 헤더 (주소, 배포 방식, 현재 버전)</td><td><code>GET /api/apps</code></td><td>화면 열 때</td></tr>
+      <tr><td>MON-05</td><td>패널 상태 (색 + 한 줄 문구)</td><td><code>GET /api/apps/{app}/status</code> → <code>color</code>, <code>message</code></td><td>15 ~ 30초</td></tr>
+      <tr><td>MON-04</td><td>에러율 · 응답 시간(평균, p95) · 요청 수 그래프</td><td><code>GET /api/apps/{app}/metrics?window=30m</code></td><td>15 ~ 30초</td></tr>
+      <tr><td>MON-06, LOG-09</td><td>파드 상태 (Ready, 재시작, 버전 · 색, CrashLoop · OOMKilled, CPU · 메모리)</td><td><code>GET /api/apps/{app}/pods</code></td><td>15 ~ 30초</td></tr>
+      <tr><td>LOG-10</td><td>최근 에러 로그</td><td><code>GET /api/apps/{app}/logs?level=error&amp;since=1h&amp;limit=20</code></td><td>30초 이상, 또는 열 때</td></tr>
+      <tr><td>MON-01</td><td>서버 3대 CPU · 메모리</td><td><code>GET /api/nodes</code></td><td>30초</td></tr>
     </table></div>
+    <ul>
+      <li>패널 색은 <b>백엔드가 계산</b>합니다. 화면은 <code>status.color</code>(gray · green · yellow · red)와 <code>status.message</code>를 그대로 쓰세요. 기준을 화면에서 다시 계산하지 않아도 됩니다.</li>
+      <li>Prometheus는 15초마다 숫자를 모으므로 15초보다 자주 불러도 값이 같습니다. 로그 조회는 1 ~ 2초 걸립니다.</li>
+    </ul>
 
-    <h3>7. 화면 구성 제안</h3>
-    <div class="table-wrap"><table>
-      <tr><th>영역</th><th>데이터</th><th>표시</th></tr>
-      <tr><td>카드 3개</td><td><code>current.requestsPerMinute</code>, <code>current.errorRate</code>, <code>current.avgLatencyMs</code></td><td><code>42.0 회/분</code>, <code>2.4%</code>, <code>18ms</code>. 에러율 카드는 아래 색 기준</td></tr>
-      <tr><td>추이 그래프</td><td><code>series[].at</code> × <code>requestsPerMinute</code> / <code>errorRate</code></td><td>x축 시각(KST), 요청 수는 막대 · 에러율은 선. 에러율 5% 선을 기준선으로 표시</td></tr>
-      <tr><td>최근 에러</td><td><code>/logs?level=error&amp;since=1h&amp;limit=20</code></td><td>시각 · 메시지 한 줄 · 이미지 태그. 이미지 태그로 "어느 배포에서 났는지" 묶어 보기</td></tr>
-      <tr><td>배포 버전</td><td>로그의 <code>image</code>, <code>slot</code></td><td>현재 버전 표시 (예: <code>green · 20261001-053104</code>)</td></tr>
-    </table></div>
-<pre>// 색 기준 (판정 규칙과 같음)
-export function level(m: TrafficMetrics): "hold" | "ok" | "warn" | "bad" {
-  if (m.requestsPerMinute &lt; 20) return "hold";   // 회색: 요청이 적어 판단 보류
-  if (m.errorRate &gt;= 0.05) return "bad";          // 빨강
-  if (m.errorRate &gt;= 0.02) return "warn";         // 노랑
-  return "ok";                                    // 초록
-}</pre>
-
-    <h3>8. 상태별 처리</h3>
+    <h3>7. 상태별 처리</h3>
     <div class="table-wrap"><table>
       <tr><th>상황</th><th>응답</th><th>화면</th></tr>
-      <tr><td>요청이 한 번도 없던 앱</td><td>200, <code>current</code> 모두 0, <code>series</code> 빈 배열</td><td>"아직 요청이 없어요" (에러 아님)</td></tr>
-      <tr><td>요청이 적음 (20회/분 미만)</td><td>200</td><td>카드는 보여주되 색은 회색, "판단 보류"</td></tr>
+      <tr><td>요청이 한 번도 없던 앱</td><td>200. metrics의 <code>current</code> 0, <code>series</code> 빈 배열. status는 gray</td><td>"아직 요청이 없어요"</td></tr>
       <tr><td>로그 없음</td><td>200, 빈 배열</td><td>"최근 에러 없음"</td></tr>
+      <tr><td>CPU · 메모리가 null</td><td>200, 해당 필드 null</td><td>"-" (metrics-server 값이 아직 없음)</td></tr>
       <tr><td>잘못된 앱 이름 · 기간</td><td>400 <code>{"message"}</code></td><td>개발 중 버그. message를 콘솔에</td></tr>
-      <tr><td>토큰 문제</td><td>401</td><td>설정 오류. "모니터링 연결을 확인해 주세요"</td></tr>
-      <tr><td>Prometheus · CloudWatch 장애</td><td>503 <code>{"message"}</code></td><td>"잠시 후 다시 시도" + 직전 값 유지</td></tr>
+      <tr><td>토큰 문제</td><td>401</td><td>"모니터링 연결을 확인해 주세요"</td></tr>
+      <tr><td>Prometheus · CloudWatch · 쿠버네티스 장애</td><td>503 <code>{"message"}</code></td><td>"잠시 후 다시 시도" + 직전 값 유지</td></tr>
     </table></div>
 
-    <h3>9. 표시 팁</h3>
+    <h3>8. 표시 팁</h3>
     <ul>
-      <li>모든 시각은 UTC입니다. 화면에는 KST(+9시간)로: <code>new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })</code></li>
-      <li>에러율은 <code>(errorRate * 100).toFixed(1) + "%"</code>, 요청 수는 소수 1자리 또는 반올림</li>
-      <li><code>series</code>는 오래된 순입니다. <code>window=30m</code>이면 점 약 60개</li>
-      <li>로그 <code>message</code>는 길 수 있습니다. 목록에서는 한 줄로 자르고, 펼치면 전체</li>
+      <li>모든 시각은 UTC입니다. 화면에는 KST로: <code>new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })</code></li>
+      <li>에러율: <code>(errorRate * 100).toFixed(1) + "%"</code>. 응답 시간: <code>Math.round(ms) + "ms"</code></li>
+      <li><code>series</code>는 오래된 순, 30초 간격. <code>window=30m</code>이면 점 약 60개</li>
+      <li>로그 <code>message</code>는 길 수 있습니다. 목록에서는 한 줄로 자르고 펼치면 전체</li>
     </ul>
+  </section>
+
+  <section id="summary">
+    <h2>API 한눈에</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Method</th><th>Path</th><th>설명</th><th>출처</th></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#apps"><code>/api/apps</code></a></td><td>배포된 앱 목록 (주소, 배포 방식, 활성 슬롯, 파드 수, 이미지)</td><td>쿠버네티스</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#status"><code>/api/apps/{app}/status</code></a></td><td>패널 색 · 한 줄 문구 · 판정 근거</td><td>Prometheus + 판정 규칙</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#metrics"><code>/api/apps/{app}/metrics</code></a></td><td>요청 수 · 에러율 · 평균 · p95 응답 시간 (최근 1분 + 추이)</td><td>Prometheus (ingress-nginx)</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#pods"><code>/api/apps/{app}/pods</code></a></td><td>파드별 Ready · 재시작 · 버전 · 문제 · CPU · 메모리</td><td>쿠버네티스 + metrics-server</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#logs"><code>/api/apps/{app}/logs</code></a></td><td>최근 로그 (파드 · 슬롯 · 이미지 버전 포함)</td><td>CloudWatch Logs</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><a href="#nodes"><code>/api/nodes</code></a></td><td>서버별 CPU · 메모리 사용률, Ready, 파드 수</td><td>쿠버네티스 + metrics-server</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/apps/{app}/risk</code></td><td>판정 이력</td><td>예정</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/monitors</code></td><td>lily-cicd 배포 완료 알림 → 자동 감시</td><td>보류 (cicd 역할 합의)</td></tr>
+    </table></div>
+    <p class="muted">공통 쿼리 <code>namespace</code> (기본 <code>default</code>). 기간은 <code>30s</code>, <code>10m</code>, <code>1h</code>, <code>2d</code> 형식.</p>
+  </section>
+
+  <section id="apps">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps</span><span class="tag">구현</span></div>
+    <p>lily-cicd로 배포된 앱 목록입니다. 슬롯 라벨(<code>track</code> 또는 <code>color</code>)이 있는 Deployment를 앱 이름으로 묶습니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>app</code></td><td>문자열</td><td>앱 이름. 다른 API의 <code>{app}</code>에 그대로 씁니다</td></tr>
+      <tr><td><code>url</code></td><td>문자열 | null</td><td>접속 주소 (Ingress 호스트)</td></tr>
+      <tr><td><code>strategy</code></td><td><code>blue-green</code> | <code>canary</code></td><td>배포 방식</td></tr>
+      <tr><td><code>activeSlot</code></td><td>문자열 | null</td><td>지금 트래픽을 받는 슬롯. 블루그린은 Service가 가리키는 색, 카나리는 <code>stable</code></td></tr>
+      <tr><td><code>readyReplicas</code> / <code>replicas</code></td><td>숫자</td><td>준비된 파드 수 / 원하는 파드 수 (모든 슬롯 합)</td></tr>
+      <tr><td><code>image</code></td><td>문자열 | null</td><td>활성 슬롯의 이미지 (태그 = 배포 시각)</td></tr>
+      <tr><td><code>deployments[]</code></td><td>배열</td><td>슬롯별 <code>name</code> · <code>slot</code> · <code>readyReplicas</code> · <code>replicas</code> · <code>image</code>. 0으로 내려간 이전 슬롯도 보입니다</td></tr>
+    </table></div>
+<pre>[
+  {
+    "app": "lily-test", "namespace": "default", "url": "https://lily-test.apps.lilycloud.kr",
+    "strategy": "blue-green", "activeSlot": "green", "readyReplicas": 1, "replicas": 1,
+    "image": "lily-test:20261001-053104",
+    "deployments": [
+      { "name": "lily-test-blue",  "slot": "blue",  "readyReplicas": 0, "replicas": 0, "image": "lily-test:20260930-101500" },
+      { "name": "lily-test-green", "slot": "green", "readyReplicas": 1, "replicas": 1, "image": "lily-test:20261001-053104" }
+    ]
+  }
+]</pre>
+    <div class="try"><b>직접 호출</b>
+      <div class="row"><button type="button" data-run="apps">조회</button></div>
+      <div class="status muted" id="apps-status"></div><pre id="apps-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/status</span><span class="tag">구현 · MON-05</span></div>
+    <p>최근 1분 지표를 판정 규칙(자동 롤백과 같은 기준)에 넣어 패널 색과 문구를 돌려줍니다. 화면은 <code>color</code>와 <code>message</code>를 그대로 쓰면 됩니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>level</code></td><td>문자열</td><td><code>HOLD</code> · <code>NORMAL</code> · <code>NOTICE</code> · <code>WARNING</code> · <code>CRITICAL</code></td></tr>
+      <tr><td><code>score</code></td><td>-1 ~ 3</td><td>-1 보류, 0 정상, 1 알림, 2 주의, 3 위험</td></tr>
+      <tr><td><code>color</code></td><td>문자열</td><td><span class="lv-gray">gray</span> · <span class="lv-green">green</span> · <span class="lv-yellow">yellow</span> · <span class="lv-red">red</span></td></tr>
+      <tr><td><code>action</code></td><td>문자열</td><td>규칙상 조치: 판정 보류 · 없음 · 알림 · 주의 알림 · 롤백</td></tr>
+      <tr><td><code>message</code></td><td>문자열</td><td>화면에 그대로 보여줄 한 줄. 예: <code>위험: 에러율 6.2%. 이전 버전으로 되돌리는 것을 권장해요</code></td></tr>
+      <tr><td><code>reason</code></td><td>문자열</td><td>판정 근거. 예: <code>5xx 6.2% ≥ 5.0%</code>, <code>p95 응답 400ms ≥ 기준 150ms x 2.0</code></td></tr>
+      <tr><td><code>current</code></td><td>TrafficMetrics</td><td>최근 1분 (아래 요청 지표와 같은 모양)</td></tr>
+      <tr><td><code>baseline</code></td><td>TrafficMetrics</td><td>비교 기준: 15분 전 ~ 5분 전. 응답 시간이 이것의 2배를 넘으면 주의</td></tr>
+      <tr><td><code>judgedAt</code></td><td>시각 (UTC)</td><td>판정 시각</td></tr>
+    </table></div>
+<pre>{
+  "app": "lily-test", "namespace": "default",
+  "level": "CRITICAL", "score": 3, "color": "red", "action": "롤백",
+  "message": "위험: 에러율 6.2%. 이전 버전으로 되돌리는 것을 권장해요",
+  "reason": "5xx 6.2% ≥ 5.0%",
+  "current":  { "requestsPerMinute": 60.0, "errorRate": 0.062, "avgLatencyMs": 10.0, "p95LatencyMs": 20.0 },
+  "baseline": { "requestsPerMinute": 100.0, "errorRate": 0.0, "avgLatencyMs": 10.0, "p95LatencyMs": 20.0 },
+  "judgedAt": "2026-10-01T07:04:08Z"
+}</pre>
+    <div class="try"><b>직접 호출</b>
+      <div class="row">
+        <label>app <input id="status-app" value="lily-test"></label>
+        <button type="button" data-run="status">조회</button>
+      </div>
+      <div class="status muted" id="status-status"></div><pre id="status-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="metrics">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/metrics</span><span class="tag">구현 · MON-04</span></div>
+    <p>앱의 최근 1분 요약(카드)과 30초 간격 추이(그래프)입니다. 앱이 아니라 입구(ingress-nginx)에서 세기 때문에 앱 언어와 상관없습니다.</p>
+    <h3>파라미터</h3>
+    <div class="table-wrap"><table>
+      <tr><th>이름</th><th>기본값</th><th>설명</th></tr>
+      <tr><td><code>window</code></td><td><code>10m</code></td><td>추이 구간. 1분 ~ 6시간 (Prometheus 보관 1일)</td></tr>
+    </table></div>
+    <h3>지표 하나하나</h3>
+    <div class="table-wrap"><table>
+      <tr><th>지표</th><th>단위</th><th>계산</th><th>읽는 법</th></tr>
+      <tr><td><code>requestsPerMinute</code></td><td>회/분</td><td>요청 수의 최근 1분 증가량</td><td>응답 코드 무관 모든 요청. 소수점은 15초 간격 숫자로 추정해서 생김. <b>20 미만이면 판정 보류</b></td></tr>
+      <tr><td><code>errorRate</code></td><td>0.0 ~ 1.0</td><td>5xx 응답 ÷ 전체 요청</td><td><code>0.05</code> = 5%. 4xx(잘못된 주소 · 권한 없음)는 사용자 쪽 문제라 제외. 기준 1% · 2% · 5%</td></tr>
+      <tr><td><code>avgLatencyMs</code></td><td>ms</td><td>응답 시간 합 ÷ 요청 수</td><td>ingress가 요청을 받은 순간부터 응답을 다 보낼 때까지. 느린 요청 몇 개는 묻힐 수 있음</td></tr>
+      <tr><td><code>p95LatencyMs</code></td><td>ms</td><td>응답 시간 히스토그램의 95 퍼센타일</td><td>"요청 100개 중 95개는 이 시간 안에 끝남". 느려진 걸 평균보다 잘 드러냄. 판정은 p95가 기준(15분 전 ~ 5분 전)의 2배 이상이면 주의. 구간 경계로 추정해서 근사값</td></tr>
+      <tr><td><code>series[].at</code></td><td>UTC</td><td>30초 간격</td><td>각 점의 값은 그 시각 기준 최근 1분 값</td></tr>
+    </table></div>
+<pre>{
+  "app": "lily-test", "namespace": "default",
+  "current": { "requestsPerMinute": 42.0, "errorRate": 0.024, "avgLatencyMs": 18.0, "p95LatencyMs": 45.0 },
+  "series": [
+    { "at": "2026-10-01T06:55:38Z", "requestsPerMinute": 1.6, "errorRate": 1.0, "avgLatencyMs": 3.0, "p95LatencyMs": 4.75 }
+  ]
+}</pre>
+    <div class="try"><b>직접 호출</b>
+      <div class="row">
+        <label>app <input id="metrics-app" value="lily-test"></label>
+        <label>window <input id="metrics-window" value="30m"></label>
+        <button type="button" data-run="metrics">조회</button>
+      </div>
+      <div class="status muted" id="metrics-status"></div><pre id="metrics-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="pods">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/pods</span><span class="tag">구현 · MON-06 · LOG-09</span></div>
+    <p>앱 파드마다 상태를 돌려줍니다. 재시작 · CrashLoopBackOff · OOMKilled 같은 쿠버네티스 이상 신호도 여기서 봅니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>name</code></td><td>문자열</td><td>파드 이름</td></tr>
+      <tr><td><code>phase</code></td><td>문자열</td><td><code>Pending</code> · <code>Running</code> · <code>Succeeded</code> · <code>Failed</code> · <code>Unknown</code></td></tr>
+      <tr><td><code>ready</code></td><td>boolean</td><td>트래픽을 받을 준비가 됐는지 (readiness 통과). <code>Running</code>이어도 <code>false</code>일 수 있습니다</td></tr>
+      <tr><td><code>restarts</code></td><td>숫자</td><td>컨테이너 재시작 횟수. 늘어나면 앱이 죽었다 살아나는 중</td></tr>
+      <tr><td><code>slot</code> / <code>image</code></td><td>문자열</td><td>슬롯(색 · track)과 이미지 버전</td></tr>
+      <tr><td><code>node</code> / <code>startedAt</code></td><td>문자열 / UTC</td><td>떠 있는 서버, 시작 시각</td></tr>
+      <tr><td><code>problem</code></td><td>문자열 | null</td><td>지금 문제: <code>CrashLoopBackOff</code>(계속 죽음), <code>ImagePullBackOff</code> · <code>ErrImagePull</code>(이미지 못 받음), <code>CreateContainerConfigError</code>(설정 오류)</td></tr>
+      <tr><td><code>lastRestartReason</code></td><td>문자열 | null</td><td>마지막 재시작 이유: <code>OOMKilled</code>(메모리 초과), <code>Error</code>(앱 비정상 종료)</td></tr>
+      <tr><td><code>cpuMillicores</code></td><td>숫자 | null</td><td>CPU 사용량. 1000 = 1코어. metrics-server 값이 없으면 null</td></tr>
+      <tr><td><code>memoryMiB</code></td><td>숫자 | null</td><td>메모리 사용량 (MiB)</td></tr>
+    </table></div>
+<pre>[
+  {
+    "name": "lily-test-green-7bfdd46749-7hm67", "phase": "Running", "ready": true, "restarts": 0,
+    "slot": "green", "image": "lily-test:20261001-053104", "node": "ip-172-31-15-165",
+    "startedAt": "2026-10-01T05:34:00Z", "problem": null, "lastRestartReason": null,
+    "cpuMillicores": 12.0, "memoryMiB": 240.5
+  }
+]</pre>
+    <div class="try"><b>직접 호출</b>
+      <div class="row">
+        <label>app <input id="pods-app" value="lily-test"></label>
+        <button type="button" data-run="pods">조회</button>
+      </div>
+      <div class="status muted" id="pods-status"></div><pre id="pods-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="logs">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/logs</span><span class="tag">구현 · LOG-10</span></div>
+    <p>CloudWatch Logs에서 그 앱의 최근 로그를 돌려줍니다. 줄마다 파드 · 슬롯 · 이미지 버전이 붙어 <b>어떤 배포에서 난 로그인지</b> 보입니다.</p>
+    <h3>파라미터</h3>
+    <div class="table-wrap"><table>
+      <tr><th>이름</th><th>기본값</th><th>설명</th></tr>
+      <tr><td><code>since</code></td><td><code>15m</code></td><td>얼마 전부터. 최대 7일 (보관 기간)</td></tr>
+      <tr><td><code>level</code></td><td><code>all</code></td><td><code>error</code>면 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code>이 들어간 줄만 (대소문자 구분)</td></tr>
+      <tr><td><code>limit</code></td><td><code>100</code></td><td>최근 것부터 최대 개수 (1 ~ 500). 결과는 오래된 순</td></tr>
+    </table></div>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>at</code></td><td>UTC</td><td>로그 시각</td></tr>
+      <tr><td><code>pod</code> / <code>slot</code> / <code>image</code></td><td>문자열 | null</td><td>어느 파드 · 슬롯 · 이미지 버전에서 났는지</td></tr>
+      <tr><td><code>message</code></td><td>문자열</td><td>로그 한 줄. JSON 로그면 <code>message</code> 또는 <code>msg</code> 필드</td></tr>
+    </table></div>
+<pre>[
+  { "at": "2026-10-01T06:21:38.692Z", "pod": "lily-test-green-7bfdd46749-7hm67", "slot": "green",
+    "image": "lily-test:20261001-053104",
+    "message": "06:21:38.692 ERROR [http-nio-8080-exec-4] c.l.blog.platform.PlatformController - chaos: forced application error triggered" }
+]</pre>
+    <p class="muted">알려진 제한: 여러 줄 에러(Java 스택 트레이스의 <code>at ...</code>)는 줄마다 따로 저장됩니다. 같은 시각 앞뒤를 <code>level=all</code>로 보면 에러 위치가 보입니다.</p>
+    <div class="try"><b>직접 호출</b>
+      <div class="row">
+        <label>app <input id="logs-app" value="lily-test"></label>
+        <label>since <input id="logs-since" value="1h"></label>
+        <label>level <select id="logs-level"><option>all</option><option selected>error</option></select></label>
+        <label>limit <input id="logs-limit" value="20" style="min-width:70px"></label>
+        <button type="button" data-run="logs">조회</button>
+      </div>
+      <div class="status muted" id="logs-status"></div><pre id="logs-out" hidden></pre>
+    </div>
+  </section>
+
+  <section id="nodes">
+    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/nodes</span><span class="tag">구현 · MON-01</span></div>
+    <p>서버(노드)별 상태입니다. 사용량은 metrics-server(k3s 기본 설치) 값이라 수십 초 늦을 수 있습니다. 디스크는 아직 없습니다 (CloudWatch Agent 예정).</p>
+    <div class="table-wrap"><table>
+      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
+      <tr><td><code>name</code> / <code>role</code></td><td>문자열</td><td>노드 이름, <code>server</code>(control-plane) 또는 <code>worker</code></td></tr>
+      <tr><td><code>instanceType</code></td><td>문자열 | null</td><td>EC2 인스턴스 타입</td></tr>
+      <tr><td><code>ready</code></td><td>boolean</td><td>쿠버네티스가 정상으로 보는지</td></tr>
+      <tr><td><code>cpuCores</code> / <code>cpuUsedCores</code> / <code>cpuPercent</code></td><td>숫자</td><td>파드가 쓸 수 있는 코어 / 지금 쓰는 코어 / 사용률(%)</td></tr>
+      <tr><td><code>memoryMiB</code> / <code>memoryUsedMiB</code> / <code>memoryPercent</code></td><td>숫자</td><td>쓸 수 있는 메모리 / 지금 쓰는 메모리 / 사용률(%)</td></tr>
+      <tr><td><code>pods</code></td><td>숫자</td><td>이 서버에서 도는 파드 수</td></tr>
+    </table></div>
+<pre>[
+  { "name": "ip-172-31-10-248", "role": "server", "instanceType": "t3.medium", "ready": true,
+    "cpuCores": 2.0, "cpuUsedCores": 0.4, "cpuPercent": 20.0,
+    "memoryMiB": 3800.0, "memoryUsedMiB": 1520.0, "memoryPercent": 40.0, "pods": 14 }
+]</pre>
+    <div class="try"><b>직접 호출</b>
+      <div class="row"><button type="button" data-run="nodes">조회</button></div>
+      <div class="status muted" id="nodes-status"></div><pre id="nodes-out" hidden></pre>
+    </div>
   </section>
 
   <section id="support">
@@ -213,173 +396,26 @@ export function level(m: TrafficMetrics): "hold" | "ok" | "warn" | "bad" {
     <p><b>lily-cicd로 배포한 앱이면 언어 · 프레임워크와 상관없이 됩니다.</b> 앱 코드에 추가할 것은 없습니다.</p>
     <div class="table-wrap"><table>
       <tr><th>기능</th><th>조건</th><th>안 되는 경우</th></tr>
-      <tr><td>지표 (요청 수 · 에러율 · 응답 시간)</td><td>ingress-nginx를 지나는 요청. lily-cicd가 만드는 <code>{app}-ingress</code></td><td>lily-cicd 밖에서 만든 앱, Ingress 이름 규칙이 다른 앱</td></tr>
-      <tr><td>로그</td><td>앱이 표준 출력(stdout · stderr)에 로그를 찍음. 컨테이너 앱의 기본 동작</td><td>로그를 컨테이너 안 파일에만 쓰는 앱</td></tr>
-      <tr><td>로그 메시지 추출</td><td>일반 글, 또는 JSON 로그의 <code>message</code> · <code>msg</code> 필드 (logback, pino, zap, zerolog 등)</td><td>다른 필드 이름을 쓰는 JSON 로그는 레코드 원문이 그대로 나옴</td></tr>
-      <tr><td><code>level=error</code> 필터</td><td>줄에 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code> 글자가 있음</td><td>소문자 <code>error</code>만 쓰거나 숫자 레벨(pino의 <code>"level":50</code>)만 있는 로그는 걸러지지 않음. <code>level=all</code>로 보면 보임</td></tr>
+      <tr><td>요청 지표 · 패널 상태</td><td>lily-cicd가 만드는 <code>{app}-ingress</code>를 지나는 요청</td><td>lily-cicd 밖에서 만든 앱</td></tr>
+      <tr><td>앱 목록 · 파드 상태</td><td>파드 라벨 <code>app</code> + <code>track</code> 또는 <code>color</code> (lily-cicd 규칙)</td><td>라벨 규칙이 다른 앱</td></tr>
+      <tr><td>로그</td><td>앱이 표준 출력(stdout · stderr)에 로그를 찍음</td><td>로그를 컨테이너 안 파일에만 쓰는 앱</td></tr>
+      <tr><td>로그 메시지 추출</td><td>일반 글, 또는 JSON 로그의 <code>message</code> · <code>msg</code> (logback, pino, zap, zerolog 등)</td><td>다른 필드 이름의 JSON 로그는 원문 그대로</td></tr>
+      <tr><td><code>level=error</code></td><td>줄에 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code></td><td>소문자 <code>error</code>만, 숫자 레벨(<code>"level":50</code>)만 있는 로그. <code>level=all</code>로는 보임</td></tr>
     </table></div>
-    <p class="muted">확인된 앱 (2026-10-01): lily-test(Spring Boot) 지표 · 로그, book-club-frontend 지표(200), blog 지표(500). 요청이 한 번도 없던 앱은 결과가 비어 있습니다. 앱 이름만 바꿔 아래 "직접 호출"로 확인할 수 있습니다.</p>
-  </section>
-
-  <section id="overview">
-    <h2>개요</h2>
-    <pre>[사용자 요청] → ingress-nginx (앱마다 {app}-ingress) → Prometheus ─┐
-[앱 로그]     → Fluent Bit (서버마다 1개)  → CloudWatch Logs ──┤
-                                                               ▼
-                                         lily-observer  /api/apps/{app}/...</pre>
-    <ul>
-      <li>지표는 앱이 아니라 <b>입구(ingress-nginx)</b>에서 셉니다. 앱 언어 · 프레임워크와 상관없이 같은 숫자가 나옵니다.</li>
-      <li>앱은 <code>{app}-ingress</code> 이름으로 구분합니다 (lily-cicd 규칙). 블루그린의 blue · green은 지표에서 구분하지 않습니다.</li>
-      <li>로그는 <code>/lily/apps</code> 로그 그룹, 파드마다 스트림 <code>{namespace}.{app}.{pod}</code>에 7일 보관됩니다.</li>
-      <li>Prometheus 보관은 1일입니다. 지표 조회 구간은 최대 6시간입니다.</li>
-    </ul>
-  </section>
-
-  <section id="auth">
-    <h2>인증</h2>
-    <p><code>/api/**</code>는 헤더 <code>Authorization: Bearer {OBSERVABILITY_API_TOKEN}</code>이 필요합니다. 서버에 토큰이 설정되지 않았으면 인증이 꺼져 있습니다 (로컬 실행 전용).</p>
-    <div class="row">
-      <label>토큰 (이 페이지의 요청에만 사용, 브라우저 탭을 닫으면 지워짐)
-        <input id="token" type="password" placeholder="비어 있으면 헤더 없이 요청" style="min-width:320px">
-      </label>
-    </div>
-  </section>
-
-  <section id="metrics">
-    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/metrics</span><span class="tag">구현</span></div>
-    <p>앱의 최근 1분 요청 지표(카드용)와 30초 간격 추이(그래프용)를 돌려줍니다.</p>
-
-    <h3>요청 파라미터</h3>
-    <div class="table-wrap"><table>
-      <tr><th>이름</th><th>위치</th><th>기본값</th><th>설명</th></tr>
-      <tr><td><code>app</code></td><td>경로</td><td>-</td><td>앱 이름. 소문자 · 숫자 · <code>-</code>. 배포할 때 쓴 이름 그대로 (예: <code>lily-test</code>)</td></tr>
-      <tr><td><code>namespace</code></td><td>쿼리</td><td><code>default</code></td><td>앱이 배포된 네임스페이스</td></tr>
-      <tr><td><code>window</code></td><td>쿼리</td><td><code>10m</code></td><td>추이 구간. <code>30s</code>, <code>10m</code>, <code>1h</code> 형식. 1분보다 짧으면 1분, 6시간보다 길면 6시간으로 맞춥니다</td></tr>
-    </table></div>
-
-    <h3>응답 필드</h3>
-    <div class="table-wrap"><table>
-      <tr><th>필드</th><th>타입 · 단위</th><th>뜻</th></tr>
-      <tr><td><code>app</code>, <code>namespace</code></td><td>문자열</td><td>요청한 값 그대로</td></tr>
-      <tr><td><code>current</code></td><td>객체</td><td>지금 시각 기준 <b>최근 1분</b> 요약. 대시보드 카드에 씁니다</td></tr>
-      <tr><td><code>series</code></td><td>배열</td><td><code>window</code> 구간을 <b>30초 간격</b>으로 나눈 점들. 각 점의 값은 그 시각 기준 최근 1분 값입니다. 그래프에 씁니다</td></tr>
-      <tr><td><code>series[].at</code></td><td>시각 (UTC, ISO-8601)</td><td>그 점의 기준 시각. 한국 시간은 +9시간</td></tr>
-    </table></div>
-
-    <h3>지표 하나하나</h3>
-    <div class="table-wrap"><table>
-      <tr><th>지표</th><th>단위</th><th>계산 방법</th><th>읽는 법</th></tr>
-      <tr>
-        <td><code>requestsPerMinute</code><br><span class="muted">분당 요청 수</span></td>
-        <td>회/분</td>
-        <td>ingress-nginx가 센 요청 수의 최근 1분 증가량.<br><code>sum(increase(nginx_ingress_controller_requests{ingress="{app}-ingress"}[1m]))</code></td>
-        <td>응답 코드와 상관없이 모든 요청. 소수점이 나오는 건 Prometheus가 15초 간격 숫자로 1분 값을 추정하기 때문입니다. <b>20 미만이면 위험도 판정을 보류</b>합니다 (적은 요청으로 비율이 크게 튀는 걸 막기 위해)</td>
-      </tr>
-      <tr>
-        <td><code>errorRate</code><br><span class="muted">에러율</span></td>
-        <td>0.0 ~ 1.0</td>
-        <td>5xx 응답 수 ÷ 전체 요청 수 (최근 1분).<br><code>status=~"5.."</code>인 요청만 에러로 셉니다</td>
-        <td><code>0.05</code> = 5%. 4xx(잘못된 주소, 권한 없음 등)는 사용자 쪽 문제라 에러로 세지 않습니다. 요청이 없으면 0. 위험도 기준: 1% 알림 · 2% 주의 · 5% 위험</td>
-      </tr>
-      <tr>
-        <td><code>avgLatencyMs</code><br><span class="muted">평균 응답 시간</span></td>
-        <td>밀리초</td>
-        <td>ingress-nginx가 요청을 받은 순간부터 응답을 다 보낼 때까지 걸린 시간의 평균.<br><code>request_duration_seconds_sum ÷ _count</code> (최근 1분)</td>
-        <td>앱 처리 시간 + ingress와 앱 사이 전달 시간. 평균이라 느린 요청 몇 개는 묻힐 수 있습니다. 위험도 기준: 배포 전보다 2배 이상이면 주의</td>
-      </tr>
-    </table></div>
-    <p class="muted">주의: 지표는 입구를 지나는 요청만 셉니다. 쿠버네티스가 직접 보내는 상태 확인(health probe)은 입구를 지나지 않아 빠집니다. 요청이 한 번도 없던 앱은 <code>current</code>가 모두 0, <code>series</code>가 비어 있습니다.</p>
-
-    <h3>응답 예시</h3>
-<pre>{
-  "app": "lily-test",
-  "namespace": "default",
-  "current": { "requestsPerMinute": 42.0, "errorRate": 0.024, "avgLatencyMs": 18.0 },
-  "series": [
-    { "at": "2026-10-01T06:22:03Z", "requestsPerMinute": 4.0, "errorRate": 1.0, "avgLatencyMs": 3.3 },
-    { "at": "2026-10-01T06:22:33Z", "requestsPerMinute": 4.0, "errorRate": 1.0, "avgLatencyMs": 3.3 }
-  ]
-}</pre>
-
-    <div class="try">
-      <b>직접 호출</b>
-      <div class="row" style="margin-top:8px">
-        <label>app <input id="m-app" value="lily-test"></label>
-        <label>namespace <input id="m-ns" value="default"></label>
-        <label>window <input id="m-window" value="30m"></label>
-        <button type="button" id="m-run">조회</button>
-      </div>
-      <div class="status muted" id="m-status"></div>
-      <div class="cards" id="m-cards"></div>
-      <pre id="m-out" hidden></pre>
-    </div>
-  </section>
-
-  <section id="logs">
-    <div class="endpoint"><span class="method get">GET</span><span class="path">/api/apps/{app}/logs</span><span class="tag">구현</span></div>
-    <p>CloudWatch Logs에서 그 앱의 최근 로그를 돌려줍니다. 줄마다 어느 파드 · 슬롯 · 이미지 버전에서 나온 로그인지 붙어 있어 <b>어떤 배포에서 난 로그인지</b> 바로 보입니다.</p>
-
-    <h3>요청 파라미터</h3>
-    <div class="table-wrap"><table>
-      <tr><th>이름</th><th>위치</th><th>기본값</th><th>설명</th></tr>
-      <tr><td><code>app</code></td><td>경로</td><td>-</td><td>앱 이름</td></tr>
-      <tr><td><code>namespace</code></td><td>쿼리</td><td><code>default</code></td><td>앱 네임스페이스</td></tr>
-      <tr><td><code>since</code></td><td>쿼리</td><td><code>15m</code></td><td>얼마 전부터. <code>15m</code>, <code>1h</code>, <code>2d</code> 형식. 최대 7일 (CloudWatch 보관 기간)</td></tr>
-      <tr><td><code>level</code></td><td>쿼리</td><td><code>all</code></td><td><code>error</code>면 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code> 중 하나가 들어간 줄만 (대소문자 구분)</td></tr>
-      <tr><td><code>limit</code></td><td>쿼리</td><td><code>100</code></td><td>최근 것부터 최대 개수 (1 ~ 500). 결과는 오래된 순으로 정렬</td></tr>
-    </table></div>
-
-    <h3>응답 필드 (배열의 각 항목)</h3>
-    <div class="table-wrap"><table>
-      <tr><th>필드</th><th>타입</th><th>뜻</th></tr>
-      <tr><td><code>at</code></td><td>시각 (UTC)</td><td>앱이 로그를 찍은 시각 (컨테이너 로그 파일 기준)</td></tr>
-      <tr><td><code>pod</code></td><td>문자열</td><td>로그를 찍은 파드. 예: <code>lily-test-green-7bfdd46749-7hm67</code></td></tr>
-      <tr><td><code>slot</code></td><td>문자열 | null</td><td>lily-cicd 슬롯 라벨. 카나리면 <code>stable</code> · <code>canary</code>, 블루그린이면 <code>blue</code> · <code>green</code>. 둘 다 있으면 카나리 값</td></tr>
-      <tr><td><code>image</code></td><td>문자열 | null</td><td>이미지 이름:태그 (레지스트리 주소 제외). 예: <code>lily-test:20261001-053104</code>. 태그가 배포 시각이라 몇 번째 배포인지 알 수 있습니다</td></tr>
-      <tr><td><code>message</code></td><td>문자열</td><td>앱이 찍은 로그 한 줄. JSON 로그면 <code>message</code> 또는 <code>msg</code> 필드 값</td></tr>
-    </table></div>
-    <p class="muted">알려진 제한: 여러 줄짜리 에러(Java 스택 트레이스의 <code>at ...</code> 줄)는 줄마다 따로 저장됩니다. 에러 위치를 보려면 같은 시각 앞뒤 로그를 <code>level=all</code>로 함께 조회하세요. 이 API를 쓰려면 서버 IAM 역할에 <code>logs:FilterLogEvents</code> 권한이 필요합니다.</p>
-
-    <h3>응답 예시</h3>
-<pre>[
-  {
-    "at": "2026-10-01T06:22:49.953Z",
-    "pod": "lily-test-green-7bfdd46749-7hm67",
-    "slot": "green",
-    "image": "lily-test:20261001-053104",
-    "message": "java.lang.IllegalStateException: chaos: forced application error"
-  }
-]</pre>
-
-    <div class="try">
-      <b>직접 호출</b>
-      <div class="row" style="margin-top:8px">
-        <label>app <input id="l-app" value="lily-test"></label>
-        <label>namespace <input id="l-ns" value="default"></label>
-        <label>since <input id="l-since" value="1h"></label>
-        <label>level
-          <select id="l-level"><option>all</option><option selected>error</option></select>
-        </label>
-        <label>limit <input id="l-limit" value="20" style="min-width:70px"></label>
-        <button type="button" id="l-run">조회</button>
-      </div>
-      <div class="status muted" id="l-status"></div>
-      <pre id="l-out" hidden></pre>
-    </div>
+    <p class="muted">확인된 앱 (2026-10-01): lily-test(Spring Boot) 지표 · 로그, book-club-frontend 지표(200), blog 지표(500).</p>
   </section>
 
   <section id="risk">
     <h2>위험도 기준</h2>
-    <p>위 지표로 판정합니다 (판정 루프는 lily-cicd와 역할 합의 후 진행). 기준값은 환경변수 <code>JUDGE_*</code>로 바꿀 수 있습니다.</p>
+    <p>패널 상태(<code>/status</code>)와 앞으로의 자동 판정이 같은 기준을 씁니다. 기준값은 환경변수 <code>JUDGE_*</code>로 바꿀 수 있습니다.</p>
     <div class="table-wrap"><table>
-      <tr><th>위험도</th><th>조건 (최근 1분)</th><th>조치</th></tr>
-      <tr><td class="lv-hold">보류</td><td><code>requestsPerMinute</code> &lt; 20</td><td>판정하지 않음</td></tr>
-      <tr><td class="lv-ok">0 정상</td><td><code>errorRate</code> &lt; 1%</td><td>없음</td></tr>
-      <tr><td class="lv-ok">1 알림</td><td><code>errorRate</code> ≥ 1%</td><td>기록</td></tr>
-      <tr><td class="lv-warn">2 주의</td><td><code>errorRate</code> ≥ 2%, 또는 <code>avgLatencyMs</code>가 배포 전의 2배 이상</td><td>주의 알림</td></tr>
-      <tr><td class="lv-bad">3 위험</td><td><code>errorRate</code> ≥ 5%</td><td>자동 롤백 (lily-cicd 롤백 API)</td></tr>
+      <tr><th>위험도</th><th>조건 (최근 1분)</th><th>색</th><th>조치</th></tr>
+      <tr><td class="lv-hold">보류 (-1)</td><td>요청 &lt; 20회/분</td><td>gray</td><td>판정하지 않음</td></tr>
+      <tr><td class="lv-ok">정상 (0)</td><td>에러율 &lt; 1%</td><td>green</td><td>없음</td></tr>
+      <tr><td class="lv-ok">알림 (1)</td><td>에러율 ≥ 1%</td><td>green</td><td>기록</td></tr>
+      <tr><td class="lv-warn">주의 (2)</td><td>에러율 ≥ 2%, 또는 p95 응답 시간이 기준(15분 전 ~ 5분 전)의 2배 이상</td><td>yellow</td><td>주의 알림</td></tr>
+      <tr><td class="lv-bad">위험 (3)</td><td>에러율 ≥ 5%</td><td>red</td><td>롤백 권장 (자동 롤백은 cicd 역할 합의 후)</td></tr>
     </table></div>
-    <p class="muted">같은 등급이 연속 2번 나와야 조치합니다 (순간 스파이크 무시).</p>
   </section>
 
   <section id="errors">
@@ -389,17 +425,7 @@ export function level(m: TrafficMetrics): "hold" | "ok" | "warn" | "bad" {
       <tr><th>코드</th><th>언제</th></tr>
       <tr><td>400</td><td>앱 이름 · 기간 · limit 형식이 잘못됨</td></tr>
       <tr><td>401</td><td>토큰이 없거나 다름</td></tr>
-      <tr><td>503</td><td>Prometheus · CloudWatch에 닿지 못함, 또는 로그 조회가 꺼져 있음 (<code>CLOUDWATCH_LOGS_ENABLED=false</code>)</td></tr>
-    </table></div>
-  </section>
-
-  <section id="planned">
-    <h2>예정 API</h2>
-    <div class="table-wrap"><table>
-      <tr><th>Method</th><th>Path</th><th>설명</th><th>상태</th></tr>
-      <tr><td><span class="method get">GET</span></td><td><code>/api/apps/{app}/risk</code></td><td>현재 위험도와 판정 이력</td><td>예정</td></tr>
-      <tr><td><span class="method get">GET</span></td><td><code>/api/nodes</code></td><td>서버별 CPU · 메모리 (CloudWatch Agent)</td><td>예정</td></tr>
-      <tr><td><span class="method post">POST</span></td><td><code>/api/monitors</code></td><td>lily-cicd가 배포 완료를 알림 → 감시 시작</td><td>보류</td></tr>
+      <tr><td>503</td><td>Prometheus · CloudWatch · 쿠버네티스에 닿지 못함, 또는 로그 조회가 꺼져 있음</td></tr>
     </table></div>
   </section>
 </main>
@@ -411,76 +437,36 @@ export function level(m: TrafficMetrics): "hold" | "ok" | "warn" | "bad" {
     try { sessionStorage.setItem('observer-token', tokenInput.value); } catch (e) {}
   });
 
-  async function call(path) {
-    const headers = {};
-    if (tokenInput.value) headers['Authorization'] = 'Bearer ' + tokenInput.value;
-    const started = performance.now();
-    const response = await fetch(path, { headers });
-    const text = await response.text();
-    let body;
-    try { body = JSON.parse(text); } catch (e) { body = text; }
-    return { status: response.status, ms: Math.round(performance.now() - started), body };
-  }
+  const value = id => encodeURIComponent(document.getElementById(id).value.trim());
+  const paths = {
+    apps: () => '/api/apps',
+    status: () => `/api/apps/${value('status-app')}/status`,
+    metrics: () => `/api/apps/${value('metrics-app')}/metrics?window=${value('metrics-window')}`,
+    pods: () => `/api/apps/${value('pods-app')}/pods`,
+    logs: () => `/api/apps/${value('logs-app')}/logs?since=${value('logs-since')}&level=${value('logs-level')}&limit=${value('logs-limit')}`,
+    nodes: () => '/api/nodes'
+  };
 
-  function show(prefix, result, path) {
-    document.getElementById(prefix + '-status').textContent = `GET ${path} → ${result.status} (${result.ms}ms)`;
-    const out = document.getElementById(prefix + '-out');
-    out.hidden = false;
-    out.textContent = typeof result.body === 'string' ? result.body : JSON.stringify(result.body, null, 2);
-  }
-
-  function card(label, value, cls) {
-    return `<div class="card"><div class="label">${label}</div><div class="value ${cls || ''}">${value}</div></div>`;
-  }
-
-  function errorClass(rate, rpm) {
-    if (rpm < 20) return 'lv-hold';
-    if (rate >= 0.05) return 'lv-bad';
-    if (rate >= 0.02) return 'lv-warn';
-    return 'lv-ok';
-  }
-
-  document.getElementById('m-run').addEventListener('click', async () => {
-    const app = encodeURIComponent(document.getElementById('m-app').value.trim());
-    const params = new URLSearchParams({
-      namespace: document.getElementById('m-ns').value.trim(),
-      window: document.getElementById('m-window').value.trim()
-    });
-    const path = `/api/apps/${app}/metrics?${params}`;
-    const cards = document.getElementById('m-cards');
-    cards.innerHTML = '';
-    try {
-      const result = await call(path);
-      show('m', result, path);
-      if (result.status === 200) {
-        const c = result.body.current;
-        const peak = result.body.series.reduce((max, p) => Math.max(max, p.errorRate), 0);
-        cards.innerHTML =
-          card('분당 요청 (최근 1분)', c.requestsPerMinute.toFixed(1)) +
-          card('에러율 (최근 1분)', (c.errorRate * 100).toFixed(1) + '%', errorClass(c.errorRate, c.requestsPerMinute)) +
-          card('평균 응답 (최근 1분)', c.avgLatencyMs.toFixed(0) + 'ms') +
-          card('구간 최고 에러율', (peak * 100).toFixed(1) + '%') +
-          card('추이 점 개수', result.body.series.length);
+  document.querySelectorAll('[data-run]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const name = button.dataset.run;
+      const path = paths[name]();
+      const status = document.getElementById(name + '-status');
+      const out = document.getElementById(name + '-out');
+      const headers = tokenInput.value ? { Authorization: 'Bearer ' + tokenInput.value } : {};
+      const started = performance.now();
+      try {
+        const response = await fetch(path, { headers });
+        const text = await response.text();
+        let body = text;
+        try { body = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+        status.textContent = `GET ${path} → ${response.status} (${Math.round(performance.now() - started)}ms)`;
+        out.hidden = false;
+        out.textContent = body;
+      } catch (e) {
+        status.textContent = '요청 실패: ' + e.message;
       }
-    } catch (e) {
-      document.getElementById('m-status').textContent = '요청 실패: ' + e.message;
-    }
-  });
-
-  document.getElementById('l-run').addEventListener('click', async () => {
-    const app = encodeURIComponent(document.getElementById('l-app').value.trim());
-    const params = new URLSearchParams({
-      namespace: document.getElementById('l-ns').value.trim(),
-      since: document.getElementById('l-since').value.trim(),
-      level: document.getElementById('l-level').value,
-      limit: document.getElementById('l-limit').value.trim()
     });
-    const path = `/api/apps/${app}/logs?${params}`;
-    try {
-      show('l', await call(path), path);
-    } catch (e) {
-      document.getElementById('l-status').textContent = '요청 실패: ' + e.message;
-    }
   });
 </script>
 </body>

@@ -62,9 +62,9 @@ public class PrometheusMetricsSource implements MetricsSource {
         }
         double errors = query("sum(increase(" + REQUESTS + "{" + filter + ",status=~\"5..\"}" + range + "))", at)
                 * perMinute;
-        double latencySeconds = query("sum(rate(" + DURATION + "_sum{" + filter + "}" + range + "))"
-                + " / sum(rate(" + DURATION + "_count{" + filter + "}" + range + "))", at);
-        return new TrafficMetrics(total, errors / total, latencySeconds * 1000);
+        double latencySeconds = query(average(filter, range), at);
+        double p95Seconds = query(p95(filter, range), at);
+        return new TrafficMetrics(total, errors / total, latencySeconds * 1000, p95Seconds * 1000);
     }
 
     @Override
@@ -75,18 +75,27 @@ public class PrometheusMetricsSource implements MetricsSource {
         Map<Long, Double> errors = queryRange(
                 "sum(rate(" + REQUESTS + "{" + filter + ",status=~\"5..\"}" + SERIES_RANGE + ")) * 60",
                 from, to, step);
-        Map<Long, Double> latencies = queryRange(
-                "sum(rate(" + DURATION + "_sum{" + filter + "}" + SERIES_RANGE + "))"
-                        + " / sum(rate(" + DURATION + "_count{" + filter + "}" + SERIES_RANGE + "))",
-                from, to, step);
+        Map<Long, Double> latencies = queryRange(average(filter, SERIES_RANGE), from, to, step);
+        Map<Long, Double> p95s = queryRange(p95(filter, SERIES_RANGE), from, to, step);
 
         List<TrafficPoint> points = new ArrayList<>();
         totals.forEach((epochSecond, total) -> {
             double errorRate = total > 0 ? errors.getOrDefault(epochSecond, 0.0) / total : 0;
             double latencyMs = latencies.getOrDefault(epochSecond, 0.0) * 1000;
-            points.add(new TrafficPoint(Instant.ofEpochSecond(epochSecond), total, errorRate, latencyMs));
+            double p95Ms = p95s.getOrDefault(epochSecond, 0.0) * 1000;
+            points.add(new TrafficPoint(Instant.ofEpochSecond(epochSecond), total, errorRate, latencyMs, p95Ms));
         });
         return points;
+    }
+
+    private static String average(String filter, String range) {
+        return "sum(rate(" + DURATION + "_sum{" + filter + "}" + range + "))"
+                + " / sum(rate(" + DURATION + "_count{" + filter + "}" + range + "))";
+    }
+
+    /** ingress-nginx 응답 시간 히스토그램(구간별 개수)에서 95 퍼센타일을 추정한다 */
+    private static String p95(String filter, String range) {
+        return "histogram_quantile(0.95, sum by (le) (rate(" + DURATION + "_bucket{" + filter + "}" + range + ")))";
     }
 
     private String filter(String namespace, String app) {

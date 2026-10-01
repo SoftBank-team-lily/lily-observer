@@ -73,3 +73,13 @@ observer:
       endpoint: ${DYNAMODB_ENDPOINT:}
       region: ${AWS_REGION:ap-northeast-2}
       create-table: ${DYNAMODB_CREATE_TABLE:false}
+
+springdoc:
+  # /swagger-ui.html (화면), /v3/api-docs (OpenAPI 명세). /api/** 만 문서에 싣는다
+  paths-to-match: /api/**
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    try-it-out-enabled: true
+    display-request-duration: true

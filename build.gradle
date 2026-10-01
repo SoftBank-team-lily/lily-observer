@@ -27,6 +27,12 @@ dependencies {
     implementation 'software.amazon.awssdk:dynamodb'
     implementation 'software.amazon.awssdk:cloudwatchlogs'
 
+    // 파드 · 노드 · 앱 상태 조회 (쿠버네티스 API, metrics-server). lily-builder 와 같은 버전
+    implementation 'io.fabric8:kubernetes-client:6.13.5'
+
+    // /swagger-ui.html, /v3/api-docs
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6'
+
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
