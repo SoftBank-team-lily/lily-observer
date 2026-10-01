@@ -75,6 +75,23 @@ class CloudWatchLogSourceTest {
     }
 
     @Test
+    void jsonAppLogsUseTheirMessageField() {
+        // 앱이 JSON 으로 찍으면 Fluent Bit 이 필드로 풀고 log 를 지운다
+        String logback = RECORD.replace(
+                "\"log\":\"java.lang.IllegalStateException: chaos: forced application error\",",
+                "\"level\":\"ERROR\",\"message\":\"order failed\",");
+        String pino = RECORD.replace(
+                "\"log\":\"java.lang.IllegalStateException: chaos: forced application error\",",
+                "\"level\":50,\"msg\":\"db timeout\",");
+        CloudWatchLogSource source = source(List.of(page(null, event(1, logback), event(2, pino))));
+
+        List<LogEntry> logs = source.recent("default", "lily-test", Instant.EPOCH, false, 10);
+
+        assertThat(logs).extracting(LogEntry::message).containsExactly("order failed", "db timeout");
+        assertThat(logs.get(0).image()).isEqualTo("lily-test:20261001-053104");
+    }
+
+    @Test
     void keepsOnlyTheLatestEventsAcrossPages() {
         CloudWatchLogSource source = source(List.of(
                 page("next", event(1, RECORD), event(2, RECORD)),

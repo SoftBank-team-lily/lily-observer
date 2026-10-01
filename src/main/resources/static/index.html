@@ -66,9 +66,12 @@
   <header>
     <h1>lily-observer API</h1>
     <p>배포된 앱의 요청 지표와 로그를 조회합니다. 대시보드와 AI 진단이 이 API를 씁니다.</p>
+    <p class="muted">대시보드를 만드는 분은 <a href="#guide">대시보드 연동 가이드</a>부터 보세요. 각 API 아래 "직접 호출"로 실제 값을 바로 확인할 수 있습니다.</p>
   </header>
 
   <nav>
+    <a href="#guide">대시보드 연동 가이드</a>
+    <a href="#support">다른 앱 지원 범위</a>
     <a href="#overview">개요</a>
     <a href="#auth">인증</a>
     <a href="#metrics">지표 조회</a>
@@ -77,6 +80,146 @@
     <a href="#errors">에러 응답</a>
     <a href="#planned">예정 API</a>
   </nav>
+
+
+  <section id="guide">
+    <h2>대시보드 연동 가이드</h2>
+    <p>lily-frontend에서 꽃을 누르면 <code>DASHBOARD_URL?project={id}</code>로 이동합니다. 그 대시보드가 이 API로 앱의 지표와 로그를 보여주는 구조입니다.</p>
+
+    <h3>1. 어디서 호출하나요</h3>
+    <div class="table-wrap"><table>
+      <tr><th>상황</th><th>주소</th><th>비고</th></tr>
+      <tr><td>대시보드 서버 (클러스터 안)</td><td><code>http://lily-observer.lily-system.svc</code></td><td>운영. 같은 k3s 클러스터에 있는 서버에서만 닿습니다</td></tr>
+      <tr><td>로컬 개발</td><td><code>http://localhost:8095</code></td><td>터널 필요 (아래 명령). 이 페이지도 같은 방법으로 열립니다</td></tr>
+    </table></div>
+<pre># 내 노트북
+ssh -i ~/.ssh/lily-key.pem -L 8095:localhost:8095 ubuntu@43.200.152.53
+# 서버 (이 창은 켜둔다)
+sudo kubectl -n lily-system port-forward svc/lily-observer 8095:80</pre>
+    <ul>
+      <li><b>브라우저에서 직접 부르지 마세요.</b> 이 서버는 클러스터 안에서만 열려 있고(ClusterIP), CORS를 허용하지 않으며, 토큰이 브라우저에 노출됩니다.</li>
+      <li>대시보드 서버(예: Next.js Route Handler)가 대신 부르고, 브라우저는 대시보드 서버만 부르게 합니다.</li>
+    </ul>
+
+    <h3>2. 앱 이름</h3>
+    <ul>
+      <li>경로의 <code>{app}</code>은 <b>배포할 때 쓴 앱 이름</b>입니다 (lily-builder · lily-cicd의 <code>appName</code>). 예: <code>lily-test</code>, <code>book-club-backend-8633c2</code></li>
+      <li>접속 주소 <code>https://{app}.apps.lilycloud.kr</code>의 앞부분과 같습니다.</li>
+      <li>대시보드는 <code>?project={id}</code>만 받으므로, 프로젝트 → 앱 이름은 lily-frontend의 프로젝트 · 배포 기록에서 찾아야 합니다.</li>
+      <li><code>namespace</code>는 지금 모든 사용자 앱이 <code>default</code>라 생략해도 됩니다.</li>
+    </ul>
+
+    <h3>3. 인증과 환경변수</h3>
+<pre># 대시보드 서버 환경변수 (권장 이름)
+OBSERVER_URL=http://lily-observer.lily-system.svc
+OBSERVER_TOKEN=...   # lily-observer 의 OBSERVABILITY_API_TOKEN 과 같은 값. 지금은 미설정(인증 꺼짐)</pre>
+    <p>모든 요청에 <code>Authorization: Bearer {OBSERVER_TOKEN}</code>을 붙입니다. 토큰이 설정되기 전에는 헤더가 없어도 됩니다.</p>
+
+    <h3>4. 타입 (TypeScript)</h3>
+<pre>export type TrafficMetrics = {
+  requestsPerMinute: number; // 회/분, 최근 1분
+  errorRate: number;         // 0.0 ~ 1.0 (5xx 비율)
+  avgLatencyMs: number;      // ms, 평균
+};
+
+export type TrafficPoint = TrafficMetrics &amp; {
+  at: string;                // ISO-8601 UTC, 30초 간격
+};
+
+export type AppMetrics = {
+  app: string;
+  namespace: string;
+  current: TrafficMetrics;   // 카드
+  series: TrafficPoint[];    // 그래프 (오래된 순)
+};
+
+export type LogEntry = {
+  at: string;                // ISO-8601 UTC
+  pod: string | null;
+  slot: string | null;       // "blue" | "green" | "stable" | "canary"
+  image: string | null;      // "lily-test:20261001-053104"
+  message: string;
+};
+
+export type ObserverError = { message: string };</pre>
+
+    <h3>5. 호출 예시 (Next.js Route Handler)</h3>
+<pre>// app/api/observer/[app]/metrics/route.ts
+export async function GET(req: Request, { params }: { params: Promise&lt;{ app: string }&gt; }) {
+  const { app } = await params;
+  const window = new URL(req.url).searchParams.get("window") ?? "30m";
+  const res = await fetch(
+    `${process.env.OBSERVER_URL}/api/apps/${encodeURIComponent(app)}/metrics?window=${window}`,
+    {
+      headers: process.env.OBSERVER_TOKEN
+        ? { Authorization: `Bearer ${process.env.OBSERVER_TOKEN}` }
+        : {},
+      cache: "no-store",
+    },
+  );
+  return new Response(await res.text(), {
+    status: res.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// 로그도 같은 방식: /api/apps/{app}/logs?since=1h&amp;level=error&amp;limit=50</pre>
+
+    <h3>6. 호출 주기</h3>
+    <div class="table-wrap"><table>
+      <tr><th>무엇</th><th>권장 주기</th><th>이유</th></tr>
+      <tr><td>지표 (<code>/metrics</code>)</td><td>15 ~ 30초</td><td>Prometheus가 15초마다 숫자를 모읍니다. 더 자주 불러도 값이 같습니다</td></tr>
+      <tr><td>로그 (<code>/logs</code>)</td><td>30초 이상, 또는 사용자가 열 때</td><td>CloudWatch 조회는 1 ~ 2초 걸리고 호출량 제한이 있습니다</td></tr>
+    </table></div>
+
+    <h3>7. 화면 구성 제안</h3>
+    <div class="table-wrap"><table>
+      <tr><th>영역</th><th>데이터</th><th>표시</th></tr>
+      <tr><td>카드 3개</td><td><code>current.requestsPerMinute</code>, <code>current.errorRate</code>, <code>current.avgLatencyMs</code></td><td><code>42.0 회/분</code>, <code>2.4%</code>, <code>18ms</code>. 에러율 카드는 아래 색 기준</td></tr>
+      <tr><td>추이 그래프</td><td><code>series[].at</code> × <code>requestsPerMinute</code> / <code>errorRate</code></td><td>x축 시각(KST), 요청 수는 막대 · 에러율은 선. 에러율 5% 선을 기준선으로 표시</td></tr>
+      <tr><td>최근 에러</td><td><code>/logs?level=error&amp;since=1h&amp;limit=20</code></td><td>시각 · 메시지 한 줄 · 이미지 태그. 이미지 태그로 "어느 배포에서 났는지" 묶어 보기</td></tr>
+      <tr><td>배포 버전</td><td>로그의 <code>image</code>, <code>slot</code></td><td>현재 버전 표시 (예: <code>green · 20261001-053104</code>)</td></tr>
+    </table></div>
+<pre>// 색 기준 (판정 규칙과 같음)
+export function level(m: TrafficMetrics): "hold" | "ok" | "warn" | "bad" {
+  if (m.requestsPerMinute &lt; 20) return "hold";   // 회색: 요청이 적어 판단 보류
+  if (m.errorRate &gt;= 0.05) return "bad";          // 빨강
+  if (m.errorRate &gt;= 0.02) return "warn";         // 노랑
+  return "ok";                                    // 초록
+}</pre>
+
+    <h3>8. 상태별 처리</h3>
+    <div class="table-wrap"><table>
+      <tr><th>상황</th><th>응답</th><th>화면</th></tr>
+      <tr><td>요청이 한 번도 없던 앱</td><td>200, <code>current</code> 모두 0, <code>series</code> 빈 배열</td><td>"아직 요청이 없어요" (에러 아님)</td></tr>
+      <tr><td>요청이 적음 (20회/분 미만)</td><td>200</td><td>카드는 보여주되 색은 회색, "판단 보류"</td></tr>
+      <tr><td>로그 없음</td><td>200, 빈 배열</td><td>"최근 에러 없음"</td></tr>
+      <tr><td>잘못된 앱 이름 · 기간</td><td>400 <code>{"message"}</code></td><td>개발 중 버그. message를 콘솔에</td></tr>
+      <tr><td>토큰 문제</td><td>401</td><td>설정 오류. "모니터링 연결을 확인해 주세요"</td></tr>
+      <tr><td>Prometheus · CloudWatch 장애</td><td>503 <code>{"message"}</code></td><td>"잠시 후 다시 시도" + 직전 값 유지</td></tr>
+    </table></div>
+
+    <h3>9. 표시 팁</h3>
+    <ul>
+      <li>모든 시각은 UTC입니다. 화면에는 KST(+9시간)로: <code>new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })</code></li>
+      <li>에러율은 <code>(errorRate * 100).toFixed(1) + "%"</code>, 요청 수는 소수 1자리 또는 반올림</li>
+      <li><code>series</code>는 오래된 순입니다. <code>window=30m</code>이면 점 약 60개</li>
+      <li>로그 <code>message</code>는 길 수 있습니다. 목록에서는 한 줄로 자르고, 펼치면 전체</li>
+    </ul>
+  </section>
+
+  <section id="support">
+    <h2>다른 앱 지원 범위</h2>
+    <p><b>lily-cicd로 배포한 앱이면 언어 · 프레임워크와 상관없이 됩니다.</b> 앱 코드에 추가할 것은 없습니다.</p>
+    <div class="table-wrap"><table>
+      <tr><th>기능</th><th>조건</th><th>안 되는 경우</th></tr>
+      <tr><td>지표 (요청 수 · 에러율 · 응답 시간)</td><td>ingress-nginx를 지나는 요청. lily-cicd가 만드는 <code>{app}-ingress</code></td><td>lily-cicd 밖에서 만든 앱, Ingress 이름 규칙이 다른 앱</td></tr>
+      <tr><td>로그</td><td>앱이 표준 출력(stdout · stderr)에 로그를 찍음. 컨테이너 앱의 기본 동작</td><td>로그를 컨테이너 안 파일에만 쓰는 앱</td></tr>
+      <tr><td>로그 메시지 추출</td><td>일반 글, 또는 JSON 로그의 <code>message</code> · <code>msg</code> 필드 (logback, pino, zap, zerolog 등)</td><td>다른 필드 이름을 쓰는 JSON 로그는 레코드 원문이 그대로 나옴</td></tr>
+      <tr><td><code>level=error</code> 필터</td><td>줄에 <code>ERROR</code> · <code>Exception</code> · <code>Error</code> · <code>panic</code> · <code>Traceback</code> 글자가 있음</td><td>소문자 <code>error</code>만 쓰거나 숫자 레벨(pino의 <code>"level":50</code>)만 있는 로그는 걸러지지 않음. <code>level=all</code>로 보면 보임</td></tr>
+    </table></div>
+    <p class="muted">확인된 앱 (2026-10-01): lily-test(Spring Boot) 지표 · 로그, book-club-frontend 지표(200), blog 지표(500). 요청이 한 번도 없던 앱은 결과가 비어 있습니다. 앱 이름만 바꿔 아래 "직접 호출"로 확인할 수 있습니다.</p>
+  </section>
 
   <section id="overview">
     <h2>개요</h2>
@@ -193,7 +336,7 @@
       <tr><td><code>pod</code></td><td>문자열</td><td>로그를 찍은 파드. 예: <code>lily-test-green-7bfdd46749-7hm67</code></td></tr>
       <tr><td><code>slot</code></td><td>문자열 | null</td><td>lily-cicd 슬롯 라벨. 카나리면 <code>stable</code> · <code>canary</code>, 블루그린이면 <code>blue</code> · <code>green</code>. 둘 다 있으면 카나리 값</td></tr>
       <tr><td><code>image</code></td><td>문자열 | null</td><td>이미지 이름:태그 (레지스트리 주소 제외). 예: <code>lily-test:20261001-053104</code>. 태그가 배포 시각이라 몇 번째 배포인지 알 수 있습니다</td></tr>
-      <tr><td><code>message</code></td><td>문자열</td><td>앱이 찍은 로그 한 줄 그대로</td></tr>
+      <tr><td><code>message</code></td><td>문자열</td><td>앱이 찍은 로그 한 줄. JSON 로그면 <code>message</code> 또는 <code>msg</code> 필드 값</td></tr>
     </table></div>
     <p class="muted">알려진 제한: 여러 줄짜리 에러(Java 스택 트레이스의 <code>at ...</code> 줄)는 줄마다 따로 저장됩니다. 에러 위치를 보려면 같은 시각 앞뒤 로그를 <code>level=all</code>로 함께 조회하세요. 이 API를 쓰려면 서버 IAM 역할에 <code>logs:FilterLogEvents</code> 권한이 필요합니다.</p>
 

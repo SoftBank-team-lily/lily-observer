@@ -36,6 +36,7 @@ public class CloudWatchLogSource implements LogSource, DisposableBean {
     private static final String ERROR_PATTERN = "?ERROR ?Exception ?Error ?panic ?Traceback";
     // 구간이 길어도 API 를 너무 많이 부르지 않게 한다
     private static final int MAX_PAGES = 10;
+    private static final List<String> MESSAGE_FIELDS = List.of("log", "message", "msg");
 
     private final CloudWatchLogsClient client;
     private final String logGroup;
@@ -103,12 +104,26 @@ public class CloudWatchLogSource implements LogSource, DisposableBean {
         if (slot == null) {
             slot = text(labels, "color");
         }
-        String message = text(record, "log");
         return new LogEntry(at,
                 text(kubernetes, "pod_name"),
                 slot,
                 shortImage(text(kubernetes, "container_image")),
-                message != null ? message : event.message());
+                message(record, event.message()));
+    }
+
+    /**
+     * 일반 글 로그는 {@code log} 에 그대로 있다. 앱이 JSON 으로 찍으면 Fluent Bit(Merge_Log)이 필드로 풀고
+     * {@code log} 를 지우므로, 흔한 메시지 필드(logback {@code message}, pino · zap · zerolog {@code msg})를 본다.
+     * 없으면 레코드 원문.
+     */
+    static String message(JsonNode record, String raw) {
+        for (String field : MESSAGE_FIELDS) {
+            String value = text(record, field);
+            if (value != null) {
+                return value;
+            }
+        }
+        return raw;
     }
 
     /** 703592323320.dkr.ecr.ap-northeast-2.amazonaws.com/lily-test:20261001-053104 → lily-test:20261001-053104 */
