@@ -7,6 +7,7 @@ import com.lily.observer.judge.RiskLevel;
 import com.lily.observer.status.AppStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ public class RemediateWatch implements SchedulingConfigurer {
     private final RemediateSender sender;
     private final CriticalStreaks streaks = new CriticalStreaks();
 
+    @Autowired
     public RemediateWatch(ObserverProperties observer, RemediateProperties remediate, ClusterSource cluster,
                           AppStatusService status, RemediateSender sender) {
         this(observer.judge().consecutive(), observer.watch().interval(), remediate, cluster, status, sender);
