@@ -65,6 +65,13 @@ observer:
     log-group: ${LOG_GROUP:/lily/apps}
     region: ${AWS_REGION:ap-northeast-2}
 
+  # 관측 근거를 builder 의 JEV 진단으로 전달한다
+  diagnosis:
+    # 별도 요청으로만 수집/진단한다. OBSERVABILITY_API_TOKEN 도 반드시 설정
+    enabled: ${DIAGNOSIS_ENABLED:false}
+    builder-url: ${DIAGNOSIS_BUILDER_URL:http://lily-builder.lily-system.svc}
+    api-token: ${DIAGNOSIS_API_TOKEN:}
+
   # 로그 사고로 레포 PR 초안을 만든다. false 면 로그를 읽지 않고 보내지 않는다
   remediate:
     enabled: ${REMEDIATE_ENABLED:false}

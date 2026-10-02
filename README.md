@@ -39,6 +39,7 @@ CloudWatch만 쓰면 숫자와 로그를 보여주고 알람을 울리는 데서
 | 패널 상태 | 위험도 규칙으로 gray · green · yellow · red와 화면에 그대로 쓸 문구를 백엔드가 계산해요 |
 | 파드 · 서버 상태 | Ready, 재시작 수, CrashLoopBackOff · OOMKilled, 파드 · 서버별 CPU · 메모리 |
 | 앱 목록 | 배포된 앱, 주소, 배포 방식, 지금 트래픽을 받는 슬롯과 이미지 |
+| JEV 진단 연결 | 앱의 관측 근거를 모아 builder에 원인 후보 판정을 요청해요. 근거 ID와 검토할 조치를 반환해요 (기본 꺼짐) |
 | 바로 쓰는 문서 | 설명 페이지(`/`), Swagger UI, OpenAPI 명세 (프론트 타입 자동 생성) |
 
 ## 동작 방식
@@ -99,6 +100,7 @@ lily-observer는 데이터를 직접 쌓지 않아요. API 요청이 오면 그�
 | `cluster` | 쿠버네티스 API로 앱 목록 · 파드 상태 · 서버 상태를 만들고, metrics-server에서 CPU · 메모리를 붙여요 |
 | `judge` | 위험도 규칙(`RiskJudge`). 요청 수 · 에러율 · p95로 보류 · 정상 · 알림 · 주의 · 위험을 정해요. 규칙은 인터페이스라 교체할 수 있어요 |
 | `status` | 최근 1분 지표와 기준(15분 전 ~ 5분 전)을 판정 규칙에 넣어 패널 색과 문구를 만들어요 |
+| `diagnosis` | 관측 수집 · 비밀값 마스킹 · builder 진단 연결 · 앱별 중복 요청 병합과 짧은 캐시 |
 | `watch` | 배포 한 건의 감시 모델. 자동 판정 루프용이에요 (보류) |
 
 ## API
@@ -112,6 +114,7 @@ lily-observer는 데이터를 직접 쌓지 않아요. API 요청이 오면 그�
 | GET | `/api/apps/{app}/metrics` | 최근 1분 요청 수 · 에러율 · 평균 · p95 + 30초 간격 추이 | Prometheus |
 | GET | `/api/apps/{app}/pods` | 파드별 Ready · 재시작 · 버전 · 문제 · CPU · 메모리 | 쿠버네티스 + metrics-server |
 | GET | `/api/apps/{app}/logs` | 최근 로그 (파드 · 슬롯 · 이미지 버전) | CloudWatch Logs |
+| POST | `/api/apps/{app}/diagnosis` | 근거와 JEV 원인 후보 판정 (기본 꺼짐) | 관측 소스 + lily-builder |
 | GET | `/api/nodes` | 서버별 CPU · 메모리 사용률, Ready, 파드 수 | 쿠버네티스 + metrics-server |
 | GET | `/api/apps/{app}/risk` | 판정 이력 | 예정 |
 | POST | `/api/monitors` | lily-cicd 배포 완료 알림 → 자동 감시 | 보류 |
@@ -134,6 +137,69 @@ lily-observer는 데이터를 직접 쌓지 않아요. API 요청이 오면 그�
   "judgedAt": "2026-10-01T07:04:08Z"
 }
 ```
+
+## JEV 진단 연결
+
+흐름은 `인증된 서버 → observer 관측 수집 → builder → lily-jev → 원인 후보 선택`이에요.
+JEV는 허용된 후보를 선택하고, builder가 근거 ID와 고정된 설명·검토 조치를 만들어요.
+프론트엔드 연동은 별도 작업이며 이 API는 내부 서버용이에요. 호출 서버에서 사용자 세션과 프로젝트 소유권을 확인한 다음 등록된 앱 이름·네임스페이스로 호출해야 해요.
+
+### 설정
+
+| 실행 위치 | 환경변수 | 값 |
+|---|---|---|
+| observer | `DIAGNOSIS_ENABLED` | `true` (기본 `false`) |
+| observer | `OBSERVABILITY_API_TOKEN` | 호출 서버가 사용하는 observer 인증 토큰. 비어 있으면 진단은 꺼져요 |
+| observer | `DIAGNOSIS_BUILDER_URL` | 기본 `http://lily-builder.lily-system.svc`; 로컬에서는 builder 포워딩 주소 |
+| observer + builder | `DIAGNOSIS_API_TOKEN` | 양쪽에 같은 내부 진단 전용 토큰 |
+| builder | `JEV_API_KEY` | TypeSafe JEV 키. 없으면 `source: rules`로 규칙만 사용 |
+
+JEV 키는 builder 서버에만 두세요. 기존 `AI_API_KEY`는 이 진단 경로에서 사용하지 않아요.
+배포 매니페스트의 Secret 참조로 환경변수를 주입한 뒤 활성화하세요. 이 브랜치는 운영 설정을 변경하지 않아요.
+진단이 꺼져 있으면 수집과 AI 호출을 모두 생략해요.
+
+```sh
+curl --fail-with-body -X POST \
+  'http://localhost:8095/api/apps/lily-test/diagnosis?namespace=default' \
+  -H "Authorization: Bearer $OBSERVABILITY_API_TOKEN"
+```
+
+요청 본문은 필요 없어요. 클라이언트가 로그나 지표를 넣지 않고 observer가 직접 모아요.
+앱 이름과 네임스페이스는 63자 이하의 소문자 DNS 레이블이에요.
+
+응답에는 `app`, `namespace`, `observedAt`, `state`, `evidence`, `missingSources`, `analysis`, `message`가 있어요.
+
+| 응답 | 의미 |
+|---|---|
+| `200`, `state: ready` | `analysis`에 진단 결과. `analysis.source`는 `ai`(JEV) 또는 `rules` |
+| `503`, `state: disabled` | 기능 또는 양쪽 인증 연결 설정이 빠짐 |
+| `503`, `state: unavailable` | 근거가 없거나 builder 연결/응답 검증 실패. 수집한 근거는 보존 |
+| `429`, `state: busy` | 이 프로세스에서 서로 다른 앱 4개를 진단 중 |
+| `400` / `401` | 잘못된 앱·네임스페이스 / observer 인증 실패 |
+
+`evidence[]`는 `id`, `source`, `signal`, `summary`로 구성돼요. `analysis.evidenceIds`와
+`analysis.recommendations[].evidenceIds`를 실제 근거에 연결해서 보여줄 수 있어요.
+`analysis`의 `category`는 `configuration`, `database`, `resources`, `application`, `traffic`, `unknown`이에요.
+현재 수집하는 자료만으로 트래픽 과부하의 인과관계를 입증할 수 없어 `traffic`은 선택하지 않아요.
+관측이 비거나 요청 수가 적으면 정상으로 단정하지 않으며 `missingSources`와 `limitations`를 함께 확인해야 해요.
+
+### 수집 범위와 요청 비용
+
+- 현재 배포 이미지·슬롯, 최근 1분 지표와 기준 지표(15~5분 전), 파드 최대 8개, 최근 15분 오류 로그 중 최신 10개를 포함해요.
+- 로그는 최대 100개를 조회해 10개로 줄이고, 전체 근거는 최대 22개·각 2,000자로 제한해요. 비밀값 패턴을 마스킹한 뒤 길이를 줄여요.
+- 설정형 비밀값, Bearer/Basic 인증, URL 사용자 정보, 알려진 키·JWT·개인 키 패턴을 가려요. 임의의 개인정보를 완전히 제거하는 기능은 아니므로 로그의 민감 정보 정책을 먼저 확인하세요. 활성화하면 정제한 자료가 builder를 거쳐 JEV로 전달될 수 있어요.
+- 같은 네임스페이스·앱의 동시 요청은 하나로 합쳐요. 성공 결과는 완료부터 30초, 연결 실패 결과는 5초 보관하며 최대 128개예요. `observedAt`이 실제 수집 시각이에요.
+- 캐시와 동시 요청 제한은 프로세스별이에요. 여러 replica 전체를 제한하려면 호출 서버나 게이트웨이에서 별도 제한이 필요해요.
+- builder 연결은 2초, 응답 읽기는 8초, 관측 수집을 포함한 전체 진단 대기는 20초로 제한해요. 시간이 지나면 작업 중단을 요청하며, 중단에 늦게 반응하는 소스가 있어도 작업 스레드는 최대 4개이고 대기 작업을 쌓지 않아요.
+
+권장 조치는 `check_configuration`, `check_database`, `review_resources`, `review_logs`, `review_code`,
+`review_rollback`, `review_traffic` 같은 고정된 식별자예요. 이 API는 PR 생성·배포·롤백·트래픽 변경을 실행하지 않아요.
+현재 배포 정보는 변경 이력이 아니며, 파드 CPU·메모리는 절대 사용량이라 사용률이나 용량 여유를 추정하지 않아요.
+
+### 테스트
+
+Java 21에서 `./gradlew test`를 실행하세요. `diagnosis` 테스트는 관측 누락·마스킹·토큰 인증·잘못된 builder 응답·캐시·동시 요청을 확인해요.
+외부 JEV나 운영 클러스터 없이 모의 관측 소스와 HTTP 응답을 사용해요. 실연결 점검은 먼저 `JEV_API_KEY` 없이 `source: rules`와 근거를 확인한 뒤 JEV 키를 설정해 진행하세요.
 
 ## 위험도 판정
 
