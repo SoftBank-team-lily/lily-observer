@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" />
 </p>
 
-> **상태** · 수집과 조회 API는 클러스터에서 동작해요 (2026-10-01). 자동 판정 루프와 롤백 호출은 lily-cicd와 역할을 맞춘 뒤 붙여요.
+> **상태** · 수집과 조회 API는 클러스터에서 동작해요 (2026-10-01). `RemediateWatch`가 `WATCH_INTERVAL`마다 판정하고, CRITICAL이 연속이면 로그 사고를 프론트로 보내요. 롤백 호출은 아직 없어요.
 
 ---
 
@@ -148,7 +148,7 @@ lily-observer는 데이터를 직접 쌓지 않아요. API 요청이 오면 그�
 - 요청이 적으면 비율이 크게 튀어서 판정을 보류해요
 - 4xx는 사용자 쪽 문제(잘못된 주소, 권한 없음)라 에러로 세지 않아요
 - 느린 요청은 평균에 묻혀서 응답 시간은 p95로 비교해요
-- 자동 판정에서는 같은 등급이 연속 2번 나와야 조치해요 (순간 스파이크 무시)
+- `RemediateWatch`는 CRITICAL이 연속 2번이고 `observer.remediate.enabled`일 때 로그 사고를 한 번 보내요. 롤백은 하지 않아요
 - 기준값은 환경변수(`JUDGE_*`)로 바꿀 수 있어요
 
 ## 다른 모듈과의 관계
@@ -268,7 +268,7 @@ sudo kubectl -n lily-system port-forward svc/lily-observer 8095:80
 | `JUDGE_NOTICE_ERROR_RATE` · `JUDGE_WARNING_ERROR_RATE` · `JUDGE_CRITICAL_ERROR_RATE` | `0.01` · `0.02` · `0.05` | 알림 · 주의 · 위험 기준 |
 | `JUDGE_LATENCY_RATIO` | `2.0` | p95가 기준의 몇 배면 주의 |
 | `JUDGE_CONSECUTIVE` | `2` | 자동 조치에 필요한 연속 판정 횟수 |
-| `WATCH_INTERVAL` · `WATCH_WINDOW` | `30s` · `10m` | 자동 판정 주기 · 감시 기간 (보류) |
+| `WATCH_INTERVAL` · `WATCH_WINDOW` | `30s` · `10m` | `RemediateWatch` 주기. `WATCH_WINDOW`는 아직 안 씀 |
 | `ROLLBACK_ENABLED` · `CICD_URL` | `false` · `http://lily-cicd.lily-system.svc` | 자동 롤백 (보류) |
 | `EVENT_STORE` | `memory` | 판정 이력 저장소 `memory` · `dynamodb` (예정) |
 
@@ -307,7 +307,8 @@ lily-observer/
 | 조회 API (앱 · 상태 · 지표 · 파드 · 로그 · 서버) | 클러스터에서 동작 확인 |
 | 설명 페이지 · Swagger · OpenAPI | 클러스터에서 동작 확인 |
 | 위험도 규칙 · 테스트 | 완료 |
-| 자동 판정 루프 · 롤백 호출 · 배포 이벤트 수신 | 보류 (lily-cicd와 역할 합의) |
+| 자동 판정 루프 (`RemediateWatch` → 로그 사고) | 코드에 있음. 기본 `observer.remediate.enabled=false` |
+| 롤백 호출 · 배포 이벤트 수신 | 보류 (lily-cicd와 역할 합의) |
 | 판정 이력 저장 (DynamoDB) | 예정 |
 | 로그 민감정보 마스킹 (토큰 · 비밀번호) | 예정 |
 | API 토큰 설정 | 예정 (지금은 클러스터 안에서만 열려 있음) |
